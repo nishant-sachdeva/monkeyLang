@@ -2,12 +2,65 @@
 // let tokens = lexer::tokenize(&input);
 use crate::interpreter::tokens::*;
 
+/// Lexer struct
+/// input: the input string
+/// position: the current position in the input (points to current char)
+/// ch: the current character under examination
+
 pub struct Lexer {
     input: String,
     position: usize,
     ch: char,
 }
 
+/// Lexer methods
+/// new: create a new Lexer
+/// tokenize: start the lexer code on a given input
+/// next_token: read the next token in the input
+/// read_char: read the next character in the input
+/// peek_char: peek at the next character in the input
+/// next_token: read the next token in the input
+/// skip_whitespace: skip whitespace in the input
+/// next_word: read the next word in the input
+/// next_number: read the next number in the input
+/// advance: advance the lexer one character
+/// 
+/// tokenize: start the lexer code on a given input
+/// 
+/// # Examples
+/// 
+/// ```
+/// use monkey_lang::interpreter::lexer::Lexer;
+/// let mut lexer = Lexer::new("let five = 5;".to_string());
+/// 
+/// assert_eq!(lexer.read_fields().0, "let five = 5;");
+/// assert_eq!(lexer.read_fields().1, 0);
+/// assert_eq!(lexer.read_fields().2, '\0');
+/// 
+/// ```
+/// use monkey_lang::interpreter::lexer::Lexer;
+/// 
+/// let mut lexer = Lexer::new("let five = 5;".to_string());
+/// let tokens = lexer.tokenize(&lexer.input);
+/// 
+/// assert_eq!(tokens[0].token_type, TokenType::LET);
+/// assert_eq!(tokens[0].literal, "let");
+/// 
+/// assert_eq!(tokens[1].token_type, TokenType::IDENT);
+/// assert_eq!(tokens[1].literal, "five");
+/// 
+/// assert_eq!(tokens[2].token_type, TokenType::ASSIGN);
+/// assert_eq!(tokens[2].literal, "=");
+/// 
+/// assert_eq!(tokens[3].token_type, TokenType::INT);
+/// assert_eq!(tokens[3].literal, "5");
+/// 
+/// assert_eq!(tokens[4].token_type, TokenType::SEMICOLON);
+/// assert_eq!(tokens[4].literal, ";");
+/// 
+/// assert_eq!(tokens[5].token_type, TokenType::EOF);
+/// assert_eq!(tokens[5].literal, "");
+/// ```
 impl Lexer {
     pub fn new (input: String) -> Lexer {
         let mut l = Lexer {
@@ -16,6 +69,10 @@ impl Lexer {
             ch: '\0' // current character under examination
         };
         return l;
+    }
+
+    pub fn read_fields(&self) -> (String, usize, char) {
+        return (self.input.clone(), self.position, self.ch);
     }
 
     // start the lexer code on a given input

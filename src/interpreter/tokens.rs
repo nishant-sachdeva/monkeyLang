@@ -1,3 +1,4 @@
+/// Token types
 #[derive(PartialEq, PartialOrd, Debug)]
 pub enum TokenType {
     ILLEGAL, EOF,
@@ -8,6 +9,27 @@ pub enum TokenType {
     FUNCTION, LET, TRUE, FALSE, IF, ELSE, RETURN
 }
 
+/// Token struct
+/// Contains the type of the token and the literal value
+/// of the token.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use monkey_lang::interpreter::tokens::{Token, TokenType};
+/// let token = Token::new(TokenType::IDENT, "foobar".to_string());
+/// 
+/// assert_eq!(token.token_type, TokenType::IDENT);
+/// assert_eq!(token.literal, "foobar");
+/// ```
+/// 
+/// ```
+/// use monkey_lang::interpreter::tokens::{Token, TokenType};
+/// let token = Token::new(TokenType::INT, "5".to_string());
+/// 
+/// assert_eq!(token.token_type, TokenType::INT);
+/// assert_eq!(token.literal, "5");
+/// ```
 #[derive(Debug)]
 pub struct Token {
     pub token_type: TokenType,
