@@ -11,6 +11,7 @@ fn main() {
             std::process::exit(1);
         }
     };
+
     match run_interpreter(&config) {
         Ok(result) => {
             assert_eq!(result, true);

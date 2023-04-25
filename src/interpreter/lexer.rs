@@ -119,8 +119,6 @@ impl Lexer {
                         "if" => TokenType::IF,
                         "else" => TokenType::ELSE,
                         "return" => TokenType::RETURN,
-                        // "==" => TokenType::EQ,
-                        // "!=" => TokenType::NotEq,
                         _ => TokenType::IDENT,
                     };
                     Token::new(token_type, ident)
