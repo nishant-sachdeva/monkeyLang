@@ -60,6 +60,17 @@ impl Parser {
                         }
                     }
                 )),
+            tokens::TokenType::RETURN => Ok(
+                ast::Statement::ReturnStatement(
+                    match self.parse_return_statement() {
+                        Ok(stmt) => stmt,
+                        Err(e) => {
+                            return Err(
+                                format!("Error parsing return statement: {}", e)
+                            );
+                        }
+                    }
+                )),
             _ => {
                 return Err(
                     format!("Expected LET, got {:?}", self.cur_token.token_type)
@@ -68,6 +79,24 @@ impl Parser {
         }
     }
 
+    fn parse_return_statement(&mut self) -> Result<ast::ReturnStatement, String> {
+        let mut statement = ast::ReturnStatement {
+            token: self.cur_token.clone(),
+            return_value: ast::Expression::Identifier(ast::Identifier {
+                token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
+                value: "".to_string(),
+            }),
+        };
+
+        self.next_token();
+
+        while !self.cur_token_is(tokens::TokenType::SEMICOLON) {
+            self.next_token();
+        }
+
+        Ok(statement)
+    }
+    
     fn parse_let_statement(&mut self) -> Result<ast::LetStatement, String> {
         let mut stmt = ast::LetStatement {
             token: self.cur_token.clone(),
@@ -164,6 +193,9 @@ mod tests {
             Ok(program) => program,
             Err(e) => panic!("Error parsing program: {}", e),
         };
+
+        assert_eq!(program.statements.len(), 1);
+
         for statement in program.statements {
             // confirm that the statement is a let statement
             match statement {
@@ -222,5 +254,65 @@ mod tests {
 
     }
 
+
+    #[test]
+    fn test_return_statement() {
+        let input = "return 5;";
+        let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => panic!("Error parsing program: {}", e),
+        };
+
+        // confirm that the program has 1 statement
+        assert_eq!(program.statements.len(), 1);
+
+        for statement in program.statements {
+            // confirm that the statement is a let statement
+            match statement {
+                ast::Statement::ReturnStatement(stmt) => {
+                    assert_eq!(stmt.token.token_type, tokens::TokenType::RETURN);
+                    assert_eq!(stmt.return_value,
+                        ast::Expression::Identifier(ast::Identifier {
+                            token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
+                            value: "".to_string()
+                        })
+                    );
+                }
+                _ => panic!("Expected Return Statement"),
+            }
+
+        }
+    }
+
+    #[test]
+    fn test_multiple_return_statements() {
+        let input = "return 5; return 10; return add(5,10);";
+        let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => panic!("Error parsing program: {}", e),
+        };
+        // confirm that the program has 3 statements
+        assert_eq!(program.statements.len(), 3);
+
+        for statement in program.statements {
+            // confirm that the statement is a let statement
+            match statement {
+                ast::Statement::ReturnStatement(stmt) => {
+                    assert_eq!(stmt.token.token_type, tokens::TokenType::RETURN);
+                    assert_eq!(stmt.return_value,
+                        ast::Expression::Identifier(ast::Identifier {
+                            token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
+                            value: "".to_string()
+                        })
+                    );
+                }
+                _ => panic!("Expected Return Statement"),
+            }
+
+        }
+
+    }
    
 }
