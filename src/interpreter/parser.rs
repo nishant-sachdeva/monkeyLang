@@ -7,8 +7,8 @@ pub struct Parser {
     peek_token: tokens::Token,
     errors: Vec<String>,
 
-    prefixParseFunctions: HashMap<tokens::TokenType, fn(&Parser) -> ast::Expression>,
-    infixParseFunctions: HashMap<tokens::TokenType, fn(&Parser) -> ast::Expression>,
+    prefixParseFunctions: HashMap<tokens::TokenType, fn(&mut Parser) -> ast::Expression>,
+    infixParseFunctions: HashMap<tokens::TokenType, fn(&mut Parser) -> ast::Expression>,
 }
 
 impl Parser {
@@ -33,13 +33,15 @@ impl Parser {
     fn initialize_prefix_functions(&mut self) {
         self.register_prefix_function(tokens::TokenType::IDENT, Parser::parse_identifier);
         self.register_prefix_function(tokens::TokenType::INT, Parser::parse_integer);
+        self.register_prefix_function(tokens::TokenType::BANG, Parser::parse_prefix_expression);
+        self.register_prefix_function(tokens::TokenType::MINUS, Parser::parse_prefix_expression);
     }
 
-    fn register_prefix_function(&mut self, t: tokens::TokenType, f: fn(&Parser) -> ast::Expression) {
+    fn register_prefix_function(&mut self, t: tokens::TokenType, f: fn(&mut Parser) -> ast::Expression) {
         self.prefixParseFunctions.insert(t, f);
     }
 
-    fn register_infix_function(&mut self, t: tokens::TokenType, f: fn(&Parser) -> ast::Expression) {
+    fn register_infix_function(&mut self, t: tokens::TokenType, f: fn(&mut Parser) -> ast::Expression) {
         self.infixParseFunctions.insert(t, f);
     }
 
@@ -123,7 +125,7 @@ impl Parser {
         Ok(stmt)
     }
 
-    fn parse_expression(&self, precedence: ast::Precedence) -> Result<ast::Expression, String> {
+    fn parse_expression(&mut self, precedence: ast::Precedence) -> Result<ast::Expression, String> {
         let prefix = match self.prefixParseFunctions.get(&self.cur_token.token_type) {
             Some(f) => f,
             None => {
@@ -132,22 +134,47 @@ impl Parser {
             }
         };
 
-        let mut left_exp = prefix(self);
+        let left_exp = prefix(self);
         return Ok(left_exp);
     }
 
-    fn parse_identifier(&self) -> ast::Expression {
+    fn parse_identifier(&mut self) -> ast::Expression {
         ast::Expression::Identifier(ast::Identifier {
             token: self.cur_token.clone(),
             value: self.cur_token.literal.clone(),
         })
     }
 
-    fn parse_integer(&self) -> ast::Expression {
+    fn parse_integer(&mut self) -> ast::Expression {
         ast::Expression::IntegerLiteral(ast::IntegerLiteral {
             token: self.cur_token.clone(),
             value: self.cur_token.literal.parse::<i64>().unwrap(),
         })
+    }
+
+    fn parse_prefix_expression(&mut self) -> ast::Expression {
+        let mut expression = ast::PrefixExpression {
+            token: self.cur_token.clone(),
+            operator: self.cur_token.literal.clone(),
+            right: Box::new(ast::Expression::Identifier(ast::Identifier {
+                token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
+                value: "".to_string(),
+            })),
+        };
+
+        self.next_token();
+
+        expression.right = Box::new(match self.parse_expression(ast::Precedence::PREFIX) {
+            Ok(exp) => exp,
+            Err(e) => {
+                return ast::Expression::Identifier(ast::Identifier {
+                    token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
+                    value: "".to_string(),
+                });
+            }
+        });
+
+        ast::Expression::PrefixExpression(expression)
     }
 
     fn parse_return_statement(&mut self) -> Result<ast::ReturnStatement, String> {
@@ -247,6 +274,56 @@ impl Parser {
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn test_prefix_expression() {
+        struct Test {
+            input: String,
+            operator: String,
+            value: i64,
+        }
+
+        let inputs = vec![
+            Test {
+                input: "!5;".to_string(),
+                operator: "!".to_string(),
+                value: 5,
+            },
+            Test {
+                input: "-15;".to_string(),
+                operator: "-".to_string(),
+                value: 15,
+            },
+        ];
+
+        for input in inputs {
+            let mut parser = Parser::new(lexer::Lexer::new(input.input));
+            let program = match parser.parse_program() {
+                Ok(program) => program,
+                Err(e) => panic!("{}", e),
+            };
+
+            assert_eq!(program.statements.len(), 1);
+            let stmt = match program.statements[0].clone() {
+                ast::Statement::ExpressionStatement(stmt) => stmt,
+                _ => panic!("Expected ExpressionStatement, got {:?}", program.statements[0]),
+            };
+
+            let exp = match stmt.expression {
+                ast::Expression::PrefixExpression(exp) => exp,
+                _ => panic!("Expected PrefixExpression, got {:?}", stmt.expression),
+            };
+
+            let expression = match exp.right.as_ref() {
+                ast::Expression::IntegerLiteral(literal) => literal,
+                _ => panic!("Expected IntegerLiteral, got {:?}", exp.right),
+            };
+
+            assert_eq!(exp.operator, input.operator);
+            assert_eq!(expression.value , input.value);
+
+        }
+    }
 
     #[test]
     fn test_integer_expression() {
