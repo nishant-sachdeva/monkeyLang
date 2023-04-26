@@ -1,5 +1,5 @@
 /// Defines the types of tokens used in the Monkey programming language.
-#[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
+#[derive(PartialEq, PartialOrd, Debug, Clone, Copy, Eq, Hash)]
 pub enum TokenType {
     ILLEGAL, EOF,
     IDENT, INT,

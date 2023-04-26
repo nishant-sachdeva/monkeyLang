@@ -1,12 +1,14 @@
-use std::error::Error;
-
+use std::collections::HashMap;
 use crate::interpreter::{ast, lexer, tokens};
 
 pub struct Parser {
     lex: lexer::Lexer,
     cur_token: tokens::Token,
     peek_token: tokens::Token,
-    errors: Vec<String>
+    errors: Vec<String>,
+
+    prefixParseFunctions: HashMap<tokens::TokenType, fn(&Parser) -> ast::Expression>,
+    infixParseFunctions: HashMap<tokens::TokenType, fn(&Parser) -> ast::Expression>,
 }
 
 impl Parser {
@@ -16,7 +18,11 @@ impl Parser {
             cur_token: tokens::Token::new(tokens::TokenType::EOF, "".to_string()),
             peek_token: tokens::Token::new(tokens::TokenType::EOF, "".to_string()),
             errors: Vec::new(),
+            prefixParseFunctions: HashMap::new(),
+            infixParseFunctions: HashMap::new(),
         };
+
+        parser.initialize_prefix_functions();
 
         parser.next_token();
         parser.next_token();
@@ -24,7 +30,19 @@ impl Parser {
         parser
     }
 
-    // function to return errors
+    fn initialize_prefix_functions(&mut self) {
+        self.register_prefix_function(tokens::TokenType::IDENT, Parser::parse_identifier);
+        self.register_prefix_function(tokens::TokenType::INT, Parser::parse_integer);
+    }
+
+    fn register_prefix_function(&mut self, t: tokens::TokenType, f: fn(&Parser) -> ast::Expression) {
+        self.prefixParseFunctions.insert(t, f);
+    }
+
+    fn register_infix_function(&mut self, t: tokens::TokenType, f: fn(&Parser) -> ast::Expression) {
+        self.infixParseFunctions.insert(t, f);
+    }
+
     pub fn errors(&self) -> Vec<String> {
         self.errors.clone()
     }
@@ -71,12 +89,65 @@ impl Parser {
                         }
                     }
                 )),
-            _ => {
-                return Err(
-                    format!("Expected LET, got {:?}", self.cur_token.token_type)
-                );
-            },
+            _ => Ok(
+                ast::Statement::ExpressionStatement(
+                    match self.parse_expression_statement() {
+                        Ok(stmt) => stmt,
+                        Err(e) => {
+                            return Err(
+                                format!("Error parsing expression statement: {}", e)
+                            );
+                        }
+                    }
+                )),
         }
+    }
+
+    fn parse_expression_statement(&mut self) -> Result<ast::ExpressionStatement, String> {
+        let stmt = ast::ExpressionStatement {
+            token: self.cur_token.clone(),
+            expression: match self.parse_expression(ast::Precedence::LOWEST) {
+                Ok(exp) => exp,
+                Err(e) => {
+                    return Err(
+                        format!("Error parsing expression: {}", e)
+                    );
+                }
+            }
+        };
+
+        if self.peek_token_is(tokens::TokenType::SEMICOLON) {
+            self.next_token();
+        }
+
+        Ok(stmt)
+    }
+
+    fn parse_expression(&self, precedence: ast::Precedence) -> Result<ast::Expression, String> {
+        let prefix = match self.prefixParseFunctions.get(&self.cur_token.token_type) {
+            Some(f) => f,
+            None => {
+                let error = format!("No prefix parse function for {:?} found", self.cur_token.token_type);
+                return Err(error);
+            }
+        };
+
+        let mut left_exp = prefix(self);
+        return Ok(left_exp);
+    }
+
+    fn parse_identifier(&self) -> ast::Expression {
+        ast::Expression::Identifier(ast::Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        })
+    }
+
+    fn parse_integer(&self) -> ast::Expression {
+        ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.parse::<i64>().unwrap(),
+        })
     }
 
     fn parse_return_statement(&mut self) -> Result<ast::ReturnStatement, String> {
@@ -89,6 +160,8 @@ impl Parser {
         };
 
         self.next_token();
+
+        // TODO :: parseExpression , followed by assert semicolon
 
         while !self.cur_token_is(tokens::TokenType::SEMICOLON) {
             self.next_token();
@@ -114,7 +187,7 @@ impl Parser {
             Ok(_) => {},
             Err(e) => {
                 return Err(
-                    format!("Error parsing let statement: {}", e)
+                    format!("{}", e)
                 );
             }
         }
@@ -128,10 +201,12 @@ impl Parser {
             Ok(_) => {},
             Err(e) => {
                 return Err(
-                    format!("Error parsing let statement: {}", e)
+                    format!("{}", e)
                 );
             }
         }
+
+        // TODO :: parseExpression , followed by assert semicolon
 
         while !self.cur_token_is(tokens::TokenType::SEMICOLON) {
             self.next_token();
@@ -149,25 +224,14 @@ impl Parser {
     }
     
     fn assert_peek(&mut self, t: tokens::TokenType) -> Result<(), String> {
-        if !self.expect_peek(t) {
-            return Err(self.peek_error(t));
-        }
-        Ok(())
-    }
-
-    fn expect_peek(&mut self, t: tokens::TokenType) -> bool {
         if self.peek_token_is(t) {
             self.next_token();
-            true
+            return Ok(());
         } else {
-            false
+            let error = format!("Expected next token to be {:?}, got {:?} instead", t, self.peek_token.token_type);
+            self.errors.push(error.clone());
+            return Err(error);
         }
-    }
-
-    fn peek_error(&mut self, t: tokens::TokenType) -> String {
-        let error = format!("Expected next token to be {:?}, got {:?} instead", t, self.peek_token.token_type);
-        self.errors.push(error.clone());
-        error
     }
 
     fn cur_token_is(&self, t: tokens::TokenType) -> bool {
@@ -181,9 +245,78 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::interpreter::ast::LetStatement;
 
     use super::*;
+
+    #[test]
+    fn test_integer_expression() {
+        let input = "5;";
+        let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => panic!("{}", e),
+        };
+
+        assert_eq!(program.statements.len(), 1);
+        let stmt = match program.statements[0].clone() {
+            ast::Statement::ExpressionStatement(stmt) => stmt,
+            _ => panic!("Expected ExpressionStatement, got {:?}", program.statements[0]),
+        };
+
+        let literal = match stmt.expression {
+            ast::Expression::IntegerLiteral(literal) => literal,
+            _ => panic!("Expected IntegerLiteral, got {:?}", stmt.expression),
+        };
+
+        assert_eq!(literal.value, 5);
+        assert_eq!(literal.token.literal, "5");
+    }
+
+    #[test]
+    fn test_identifier_expression() {
+        let input = "foobar";
+        let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => panic!("{}", e),
+        };
+
+        assert_eq!(program.statements.len(), 1);
+        let stmt = match program.statements[0].clone() {
+            ast::Statement::ExpressionStatement(stmt) => stmt,
+            _ => panic!("Expected ExpressionStatement, got {:?}", program.statements[0]),
+        };
+
+        let ident = match stmt.expression {
+            ast::Expression::Identifier(ident) => ident,
+            _ => panic!("Expected Identifier, got {:?}", stmt.expression),
+        };
+
+        assert_eq!(ident.value, "foobar");
+        assert_eq!(ident.token.literal, "foobar");
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected next token to be IDENT, got ASSIGN instead")]
+    fn test_let_statement_missing_ident_negative() {
+        let input = "let = 5;";
+        let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
+        let _program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => panic!("{}", e),
+        };
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected next token to be ASSIGN")]
+    fn test_let_statement_missing_assign_negative() {
+        let input = "let var 5;";
+        let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
+        let _program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => panic!("{}", e),
+        };
+    }
 
     #[test]
     fn test_let_statement() {
@@ -284,6 +417,19 @@ mod tests {
 
         }
     }
+
+    
+    #[test]
+    // #[should_panic(expected = "Expected next token to be EXPRESSION, got SEMICOLON instead")]
+    fn test_return_statement_negative() {
+        let input = "return ;";
+        let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
+        let _program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => panic!("{}", e),
+        };
+    }
+
 
     #[test]
     fn test_multiple_return_statements() {

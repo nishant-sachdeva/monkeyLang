@@ -1,6 +1,6 @@
 use std::default;
 
-use crate::interpreter::tokens::{Token, TokenType};
+use crate::interpreter::tokens::Token;
 
 pub struct Program {
     pub statements: Vec<Statement>,
@@ -11,6 +11,21 @@ impl Program {
         Program {
             statements: Vec::new(),
         }
+    }
+
+    // method to print the AST
+    pub fn print(&self) -> String {
+        let mut output = String::new();
+
+        for statement in &self.statements {
+            let node_str = match statement {
+                Statement::LetStatement(s) => format!("LetStatement {:?} \n", s),
+                Statement::ReturnStatement(r) => format!("ReturnStatement {:?} \n", r),
+                Statement::ExpressionStatement(e) => format!("ExpressionStatement {:?} \n", e),
+            };
+            output.push_str(&node_str);
+        }
+        output
     }
 }
 
@@ -56,4 +71,14 @@ pub struct Identifier {
 pub struct IntegerLiteral {
     pub token: Token,
     pub value: i64,
+}
+
+pub enum Precedence {
+    LOWEST,
+    EQUALS, // ==
+    LESSGREATER, // > or <
+    SUM, // +
+    PRODUCT, // *
+    PREFIX, // -X or !X
+    CALL, // myFunction(X)
 }
