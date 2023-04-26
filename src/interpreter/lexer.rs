@@ -88,7 +88,7 @@ impl Lexer {
         return tokens;
     }
 
-    fn next_token(&mut self) -> Option<Token> {
+    pub fn next_token(&mut self) -> Option<Token> {
         self.skip_whitespace();
         let token = match self.read_char() {
             '=' => {
