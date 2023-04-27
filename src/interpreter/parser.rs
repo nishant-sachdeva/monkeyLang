@@ -339,7 +339,88 @@ impl Parser {
 #[cfg(test)]
 mod tests {
 
+    use crate::interpreter::*;
     use super::*;
+
+    #[test]
+    fn test_infix_expression_precedence() {
+        struct Test {
+            input: String,
+            expected: String,
+        }
+
+        // creating an array of inputs
+        let inputs = vec![
+            Test {
+                input: "!-a".to_string(),
+                expected: "(!(-a))".to_string(),
+            },
+
+            Test {
+                input: "a + b + c".to_string(),
+                expected: "((a + b) + c)".to_string(),
+            },
+
+            Test {
+                input: "a + b - c".to_string(),
+                expected: "((a + b) - c)".to_string(),
+            },
+
+            Test {
+                input: "a * b * c".to_string(),
+                expected: "((a * b) * c)".to_string(),
+            },
+
+            Test {
+                input: "a * b / c".to_string(),
+                expected: "((a * b) / c)".to_string(),
+            },
+
+            Test {
+                input: "a + b / c".to_string(),
+                expected: "(a + (b / c))".to_string(),
+            },
+
+            Test {
+                input: "a + b * c + d / e - f".to_string(),
+                expected: "(((a + (b * c)) + (d / e)) - f)".to_string(),
+            },
+
+            Test {
+                input: "3 + 4; -5 * 5".to_string(),
+                expected: "(3 + 4)((-5) * 5)".to_string(),
+            },
+
+            Test {
+                input: "5 > 4 == 3 < 4".to_string(),
+                expected: "((5 > 4) == (3 < 4))".to_string(),
+            },
+
+            Test {
+                input: "5 < 4 != 3 > 4".to_string(),
+                expected: "((5 < 4) != (3 > 4))".to_string(),
+            },
+
+            Test {
+                input: "3 + 4 * 5 == 3 * 1 + 4 * 5".to_string(),
+                expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))".to_string(),
+            },
+        ];
+
+        for input in inputs {
+            let mut l = crate::interpreter::lexer::Lexer::new(input.input);
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+
+            assert!(p.errors.is_empty());
+
+            // TODO :: complete this test case
+            // we need a funtion to print out the parsed program
+
+            // let actual = program.to_string();
+            // assert_eq!(actual, input.expected);
+        }
+    }
 
     #[test]
     fn test_infix_expression() {
