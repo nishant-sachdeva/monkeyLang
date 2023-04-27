@@ -38,6 +38,7 @@ impl Parser {
         self.register_prefix_function(tokens::TokenType::MINUS, Parser::parse_prefix_expression);
         self.register_prefix_function(tokens::TokenType::TRUE, Parser::parse_boolean);
         self.register_prefix_function(tokens::TokenType::FALSE, Parser::parse_boolean);
+        self.register_prefix_function(tokens::TokenType::LPAREN, Parser::parse_grouped_expression);
     }
 
     fn register_prefix_function(&mut self, t: tokens::TokenType, f: fn(&mut Parser) -> ast::Expression) {
@@ -166,6 +167,26 @@ impl Parser {
         return Ok(left_exp);
     }
 
+    fn parse_grouped_expression(&mut self) -> ast::Expression {
+        self.next_token();
+
+        let exp = match self.parse_expression(ast::Precedence::LOWEST) {
+            Ok(exp) => exp,
+            Err(e) => {
+                panic!("Error parsing grouped expression: {}", e);
+            }
+        };
+
+        match self.assert_peek(tokens::TokenType::RPAREN) {
+            Ok(_) => {},
+            Err(e) => {
+                panic!("Error parsing grouped expression: {}", e);
+            }
+        }
+
+        return exp;
+    }
+
     fn parse_identifier(&mut self) -> ast::Expression {
         ast::Expression::Identifier(ast::Identifier {
             token: self.cur_token.clone(),
@@ -176,7 +197,14 @@ impl Parser {
     fn parse_integer(&mut self) -> ast::Expression {
         ast::Expression::IntegerLiteral(ast::IntegerLiteral {
             token: self.cur_token.clone(),
-            value: self.cur_token.literal.parse::<i64>().unwrap(),
+            value: match self.cur_token.literal.parse::<i64>() {
+                Ok(v) => v,
+                Err(_) => {
+                    let error = format!("Could not parse {} as integer", self.cur_token.literal);
+                    self.errors.push(error.clone());
+                    panic!("{}", error);
+                }
+            }
         })
     }
 
@@ -486,6 +514,37 @@ mod tests {
                 input: "3 < 5 == true".to_string(),
                 expected: "((3 < 5) == true)".to_string(),
             },
+
+            Test {
+                input: "1 + (2 + 3) + 4".to_string(),
+                expected: "((1 + (2 + 3)) + 4)".to_string(),
+            },
+
+            Test {
+                input: "(5 + 5) * 2".to_string(),
+                expected: "((5 + 5) * 2)".to_string(),
+            },
+
+            Test {
+                input: "2 / (5 + 5)".to_string(),
+                expected: "(2 / (5 + 5))".to_string(),
+            },
+
+            Test {
+                input: "-(5 + 5)".to_string(),
+                expected: "(-(5 + 5))".to_string(),
+            },
+
+            Test {
+                input: "!(true == true)".to_string(),
+                expected: "(!(true == true))".to_string(),
+            },
+
+            // Test {
+            //     input: "a + add(b * c) + d".to_string(),
+            //     expected: "((a + add((b * c))) + d)".to_string(),
+            // },
+
         ];
 
         for input in inputs {
