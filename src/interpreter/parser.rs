@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use crate::interpreter::{ast, lexer, tokens};
 
+use super::ast::BlockStatement;
+
 pub struct Parser {
     lex: lexer::Lexer,
     cur_token: tokens::Token,
@@ -39,6 +41,7 @@ impl Parser {
         self.register_prefix_function(tokens::TokenType::TRUE, Parser::parse_boolean);
         self.register_prefix_function(tokens::TokenType::FALSE, Parser::parse_boolean);
         self.register_prefix_function(tokens::TokenType::LPAREN, Parser::parse_grouped_expression);
+        self.register_prefix_function(tokens::TokenType::IF, Parser::parse_if_expression)
     }
 
     fn register_prefix_function(&mut self, t: tokens::TokenType, f: fn(&mut Parser) -> ast::Expression) {
@@ -185,6 +188,104 @@ impl Parser {
         }
 
         return exp;
+    }
+
+    fn parse_if_expression(&mut self) -> ast::Expression {
+        let mut expression = ast::IfExpression {
+            token: tokens::Token {
+                token_type: tokens::TokenType::IF,
+                literal: "if".to_string(),
+            },
+            condition: Box::new(ast::Expression::Identifier(ast::Identifier {
+                token: tokens::Token {
+                    token_type: tokens::TokenType::IDENT,
+                    literal: "".to_string(),
+                },
+                value: "".to_string(),
+            })),
+            consequence: BlockStatement {
+                token: tokens::Token {
+                    token_type: tokens::TokenType::LBRACE,
+                    literal: "{".to_string(),
+                },
+                statements: vec![],
+            },
+            alternative: None,
+        };
+
+        match self.assert_peek(tokens::TokenType::LPAREN) {
+            Ok(_) => {},
+            Err(e) => {
+                panic!("Error parsing if expression: {}", e);
+            }
+        }
+
+        self.next_token();
+
+        expression.condition = Box::new(
+            match self.parse_expression(ast::Precedence::LOWEST) {
+                Ok(exp) => exp,
+                Err(e) => {
+                    panic!("Error parsing if expression: {}", e);
+                }
+            }
+        );
+
+        match self.assert_peek(tokens::TokenType::RPAREN) {
+            Ok(_) => {},
+            Err(e) => {
+                panic!("Error parsing if expression: {}", e);
+            }
+        }
+
+        match self.assert_peek(tokens::TokenType::LBRACE) {
+            Ok(_) => {},
+            Err(e) => {
+                panic!("Error parsing if expression: {}", e);
+            }
+        }
+
+        expression.consequence = self.parse_block_statement();
+
+        if self.peek_token_is(tokens::TokenType::ELSE) {
+            self.next_token();
+
+            match self.assert_peek(tokens::TokenType::LBRACE) {
+                Ok(_) => {},
+                Err(e) => {
+                    panic!("Error parsing if expression: {}", e);
+                }
+            }
+
+            expression.alternative = Some(self.parse_block_statement());
+        }
+
+        return ast::Expression::IfExpression(expression);
+    
+    }
+
+    fn parse_block_statement(&mut self) -> ast::BlockStatement {
+        let mut block = ast::BlockStatement {
+            token: self.cur_token.clone(),
+            statements: vec![],
+        };
+
+        self.next_token();
+
+        while !self.cur_token_is(tokens::TokenType::RBRACE) && !self.cur_token_is(tokens::TokenType::EOF) {
+            match self.parse_statement() {
+                Ok(stmt) => {
+                    block.statements.push(stmt);
+                },
+                Err(e) => {
+                    panic!("Error parsing block statement: {}", e);
+                }
+            }
+
+            self.next_token();
+        }
+
+        return block;
     }
 
     fn parse_identifier(&mut self) -> ast::Expression {
@@ -380,6 +481,170 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_if_expression() {
+        let input = "if (x < y) { x }";
+
+        let lexer = lexer::Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => {
+                panic!("{}", e);
+            }
+        };
+
+        assert_eq!(program.statements.len(), 1);
+
+        let stmt = &program.statements[0];
+
+        match stmt {
+            ast::Statement::ExpressionStatement(stmt) => {
+                match &stmt.expression {
+                    ast::Expression::IfExpression(exp) => {
+                        assert_eq!(*exp.condition, ast::Expression::InfixExpression(ast::InfixExpression {
+                            token: tokens::Token {
+                                token_type: tokens::TokenType::LT,
+                                literal: "<".to_string(),
+                            },
+                            operator: "<".to_string(),
+                            left: Box::new(ast::Expression::Identifier(ast::Identifier {
+                                token: tokens::Token {
+                                    token_type: tokens::TokenType::IDENT,
+                                    literal: "x".to_string(),
+                                },
+                                value: "x".to_string(),
+                            })),
+                            right: Box::new(ast::Expression::Identifier(ast::Identifier {
+                                token: tokens::Token {
+                                    token_type: tokens::TokenType::IDENT,
+                                    literal: "y".to_string(),
+                                },
+                                value: "y".to_string(),
+                            })),
+                        }));
+
+                        assert_eq!(exp.consequence.statements.len(), 1);
+
+                        match &exp.consequence.statements[0] {
+                            ast::Statement::ExpressionStatement(stmt) => {
+                                match &stmt.expression {
+                                    ast::Expression::Identifier(ident) => {
+                                        assert_eq!(ident.value, "x");
+                                    },
+                                    _ => {
+                                        panic!("Expected expression statement to be an identifier");
+                                    }
+                                }
+                            },
+                            _ => {
+                                panic!("Expected consequence to be an expression statement");
+                            }
+                        }
+                    },
+                    _ => {
+                        panic!("Expected expression statement to be an if expression");
+                    }
+                }
+            },
+            _ => {
+                panic!("Expected statement to be an expression statement");
+            }
+        }
+    }
+
+
+    #[test]
+    fn test_if_else_expression() {
+        let input = "if (x < y) { x } else { y }";
+        let lexer = lexer::Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => {
+                panic!("{}", e);
+            }
+        };
+
+        assert_eq!(program.statements.len(), 1);
+
+        let stmt = &program.statements[0];
+
+        match stmt {
+            ast::Statement::ExpressionStatement(stmt) => {
+                match &stmt.expression {
+                    ast::Expression::IfExpression(exp) => {
+                        assert_eq!(*exp.condition, ast::Expression::InfixExpression(ast::InfixExpression {
+                            token: tokens::Token {
+                                token_type: tokens::TokenType::LT,
+                                literal: "<".to_string(),
+                            },
+                            operator: "<".to_string(),
+                            left: Box::new(ast::Expression::Identifier(ast::Identifier {
+                                token: tokens::Token {
+                                    token_type: tokens::TokenType::IDENT,
+                                    literal: "x".to_string(),
+                                },
+                                value: "x".to_string(),
+                            })),
+                            right: Box::new(ast::Expression::Identifier(ast::Identifier {
+                                token: tokens::Token {
+                                    token_type: tokens::TokenType::IDENT,
+                                    literal: "y".to_string(),
+                                },
+                                value: "y".to_string(),
+                            })),
+                        }));
+
+                        assert_eq!(exp.consequence.statements.len(), 1);
+
+                        match &exp.consequence.statements[0] {
+                            ast::Statement::ExpressionStatement(stmt) => {
+                                match &stmt.expression {
+                                    ast::Expression::Identifier(ident) => {
+                                        assert_eq!(ident.value, "x");
+                                    },
+                                    _ => {
+                                        panic!("Expected expression statement to be an identifier");
+                                    }
+                                }
+                            },
+                            _ => {
+                                panic!("Expected consequence to be an expression statement");
+                            }
+                        }
+
+                        assert_eq!(exp.alternative.as_ref().unwrap().statements.len(), 1);
+
+                        match &exp.alternative.as_ref().unwrap().statements[0] {
+                            ast::Statement::ExpressionStatement(stmt) => {
+                                match &stmt.expression {
+                                    ast::Expression::Identifier(ident) => {
+                                        assert_eq!(ident.value, "y");
+                                    },
+                                    _ => {
+                                        panic!("Expected expression statement to be an identifier");
+                                    }
+                                }
+                            },
+                            _ => {
+                                panic!("Expected consequence to be an expression statement");
+                            }
+                        }
+                    },
+                    _ => {
+                        panic!("Expected expression statement to be an if expression");
+                    }
+                }
+            },
+            _ => {
+                panic!("Expected statement to be an expression statement");
+            }
+        }
+    }
+
+
+    #[test]
     fn test_boolean_expression() {
         struct Test {
             input: String,
@@ -539,11 +804,6 @@ mod tests {
                 input: "!(true == true)".to_string(),
                 expected: "(!(true == true))".to_string(),
             },
-
-            // Test {
-            //     input: "a + add(b * c) + d".to_string(),
-            //     expected: "((a + add((b * c))) + d)".to_string(),
-            // },
 
         ];
 

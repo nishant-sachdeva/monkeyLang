@@ -29,27 +29,27 @@ impl Program {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     LetStatement(LetStatement),
     ReturnStatement(ReturnStatement),
     ExpressionStatement(ExpressionStatement),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LetStatement {
     pub token: Token,
     pub name: Identifier,
     pub value: Expression,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReturnStatement {
     pub token: Token,
     pub return_value: Expression,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Expression,
@@ -62,6 +62,22 @@ pub enum Expression {
     BooleanLiteral(BooleanLiteral),
     PrefixExpression(PrefixExpression),
     InfixExpression(InfixExpression),
+    IfExpression(IfExpression),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfExpression {
+    pub token: Token,
+    pub condition: Box<Expression>,
+    pub consequence: BlockStatement,
+    pub alternative: Option<BlockStatement>,
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockStatement {
+    pub token: Token,
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
