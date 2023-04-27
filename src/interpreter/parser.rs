@@ -36,6 +36,8 @@ impl Parser {
         self.register_prefix_function(tokens::TokenType::INT, Parser::parse_integer);
         self.register_prefix_function(tokens::TokenType::BANG, Parser::parse_prefix_expression);
         self.register_prefix_function(tokens::TokenType::MINUS, Parser::parse_prefix_expression);
+        self.register_prefix_function(tokens::TokenType::TRUE, Parser::parse_boolean);
+        self.register_prefix_function(tokens::TokenType::FALSE, Parser::parse_boolean);
     }
 
     fn register_prefix_function(&mut self, t: tokens::TokenType, f: fn(&mut Parser) -> ast::Expression) {
@@ -175,6 +177,13 @@ impl Parser {
         ast::Expression::IntegerLiteral(ast::IntegerLiteral {
             token: self.cur_token.clone(),
             value: self.cur_token.literal.parse::<i64>().unwrap(),
+        })
+    }
+
+    fn parse_boolean(&mut self) -> ast::Expression {
+        ast::Expression::BooleanLiteral(ast::BooleanLiteral {
+            token: self.cur_token.clone(),
+            value: self.cur_token_is(tokens::TokenType::TRUE),
         })
     }
 
@@ -343,6 +352,58 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_boolean_expression() {
+        struct Test {
+            input: String,
+            expected: bool,
+        }
+
+        // creating an array of inputs
+        let inputs = vec![
+            Test {
+                input: "true".to_string(),
+                expected: true,
+            },
+
+            Test {
+                input: "false".to_string(),
+                expected: false,
+            },
+        ];
+
+        for input in inputs {
+            let lexer = lexer::Lexer::new(input.input);
+            let mut parser = Parser::new(lexer);
+            let program = match parser.parse_program() {
+                Ok(program) => program,
+                Err(e) => {
+                    panic!("{}", e);
+                }
+            };
+
+            assert_eq!(program.statements.len(), 1);
+
+            let stmt = &program.statements[0];
+
+            match stmt {
+                ast::Statement::ExpressionStatement(stmt) => {
+                    match &stmt.expression {
+                        ast::Expression::BooleanLiteral(exp) => {
+                            assert_eq!(exp.value, input.expected);
+                        },
+                        _ => {
+                            assert!(false);
+                        }
+                    }
+                },
+                _ => {
+                    assert!(false);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn test_infix_expression_precedence() {
         struct Test {
             input: String,
@@ -404,6 +465,26 @@ mod tests {
             Test {
                 input: "3 + 4 * 5 == 3 * 1 + 4 * 5".to_string(),
                 expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))".to_string(),
+            },
+
+            Test {
+                input: "true".to_string(),
+                expected: "true".to_string(),
+            },
+
+            Test {
+                input: "false".to_string(),
+                expected: "false".to_string(),
+            },
+
+            Test {
+                input: "3 > 5 == false".to_string(),
+                expected: "((3 > 5) == false)".to_string(),
+            },
+
+            Test {
+                input: "3 < 5 == true".to_string(),
+                expected: "((3 < 5) == true)".to_string(),
             },
         ];
 

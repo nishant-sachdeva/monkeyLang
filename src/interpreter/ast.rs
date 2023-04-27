@@ -14,7 +14,7 @@ impl Program {
     }
 
     // method to print the AST
-    pub fn print(&self) -> String {
+    pub fn print_program(&self) -> String {
         let mut output = String::new();
 
         for statement in &self.statements {
@@ -59,8 +59,15 @@ pub struct ExpressionStatement {
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
+    BooleanLiteral(BooleanLiteral),
     PrefixExpression(PrefixExpression),
     InfixExpression(InfixExpression),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BooleanLiteral {
+    pub token: Token,
+    pub value: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
