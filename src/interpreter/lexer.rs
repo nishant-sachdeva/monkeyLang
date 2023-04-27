@@ -131,7 +131,7 @@ impl Lexer {
                 if self.peek_char() == '=' {
                     self.advance();
                     self.advance();
-                    Token::new(TokenType::NotEq, self.input[self.position - 2..self.position].to_string())
+                    Token::new(TokenType::NOT_EQ, self.input[self.position - 2..self.position].to_string())
                 } else {
                     self.advance();
                     Token::new(TokenType::BANG, self.ch.to_string())

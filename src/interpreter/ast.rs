@@ -1,6 +1,6 @@
 use std::default;
 
-use crate::interpreter::tokens::Token;
+use crate::interpreter::tokens::*;
 
 pub struct Program {
     pub statements: Vec<Statement>,
@@ -60,6 +60,7 @@ pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
     PrefixExpression(PrefixExpression),
+    InfixExpression(InfixExpression),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -81,6 +82,16 @@ pub struct PrefixExpression {
     pub right: Box<Expression>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct InfixExpression {
+    pub token: Token,
+    pub left: Box<Expression>,
+    pub operator: String,
+    pub right: Box<Expression>,
+}
+
+
+#[derive(Debug, Clone, PartialOrd, PartialEq)]
 pub enum Precedence {
     LOWEST,
     EQUALS, // ==
@@ -89,4 +100,22 @@ pub enum Precedence {
     PRODUCT, // *
     PREFIX, // -X or !X
     CALL, // myFunction(X)
+}
+
+// define precedence for each operator
+impl Precedence {
+    pub fn get_precedence(operator: TokenType) -> Precedence {
+        match operator {
+            TokenType::EQ => Precedence::EQUALS,
+            TokenType::NOT_EQ => Precedence::EQUALS,
+            TokenType::LT => Precedence::LESSGREATER,
+            TokenType::GT => Precedence::LESSGREATER,
+            TokenType::PLUS => Precedence::SUM,
+            TokenType::MINUS => Precedence::SUM,
+            TokenType::SLASH => Precedence::PRODUCT,
+            TokenType::ASTERISK => Precedence::PRODUCT,
+            TokenType::LPAREN => Precedence::CALL,
+            _ => Precedence::LOWEST,
+        }
+    }
 }
