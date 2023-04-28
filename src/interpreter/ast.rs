@@ -62,6 +62,14 @@ pub enum Expression {
     InfixExpression(InfixExpression),
     IfExpression(IfExpression),
     FunctionLiteral(FunctionLiteral),
+    CallExpression(CallExpression),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CallExpression {
+    pub token: Token,
+    pub function: Box<Expression>,
+    pub arguments: Vec<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

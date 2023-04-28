@@ -119,6 +119,7 @@ impl Parser {
         self.register_infix_function(tokens::TokenType::NotEq, Parser::parse_infix_expression);
         self.register_infix_function(tokens::TokenType::LT, Parser::parse_infix_expression);
         self.register_infix_function(tokens::TokenType::GT, Parser::parse_infix_expression);
+        self.register_infix_function(tokens::TokenType::LPAREN, Parser::parse_call_expression);
     }
 
     fn register_infix_function(&mut self, t: tokens::TokenType, f: fn(&mut Parser, &ast::Expression) -> ast::Expression) {
@@ -488,6 +489,56 @@ impl Parser {
         ast::Expression::PrefixExpression(expression)
     }
 
+    fn parse_call_expression(&mut self, function: &ast::Expression) -> ast::Expression {
+        let mut expression = ast::CallExpression {
+            token: self.cur_token.clone(),
+            function: Box::new(function.clone()),
+            arguments: vec![],
+        };
+
+        expression.arguments = self.parse_call_arguments();
+
+        return ast::Expression::CallExpression(expression);
+    }
+
+    fn parse_call_arguments(&mut self) -> Vec<ast::Expression> {
+        let mut args = vec![];
+
+        if self.peek_token_is(tokens::TokenType::RPAREN) {
+            self.next_token();
+            return args;
+        }
+        self.next_token();
+
+        args.push(match self.parse_expression(ast::Precedence::LOWEST) {
+            Ok(exp) => exp,
+            Err(e) => {
+                panic!("Error parsing call arguments: {}", e);
+            }
+        });
+
+        while self.peek_token_is(tokens::TokenType::COMMA) {
+            self.next_token();
+            self.next_token();
+
+            args.push(match self.parse_expression(ast::Precedence::LOWEST) {
+                Ok(exp) => exp,
+                Err(e) => {
+                    panic!("Error parsing call arguments: {}", e);
+                }
+            });
+        }
+
+        match self.assert_peek(tokens::TokenType::RPAREN) {
+            Ok(_) => {},
+            Err(e) => {
+                panic!("Error parsing call arguments: {}", e);
+            }
+        }
+
+        return args;        
+    }
+
     fn parse_infix_expression(&mut self, left: &ast::Expression) -> ast::Expression {
         // initialize expression
         let mut expression = ast::InfixExpression {
@@ -626,6 +677,39 @@ mod tests {
 
     use crate::interpreter::*;
     use super::*;
+
+    #[test]
+    fn test_function_call_parsing() {
+        let input = "add(1, 2 * 3, 4 + 5);";
+        let lexer = lexer::Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(_) => panic!("Error parsing program"),
+        };
+
+        assert_eq!(program.statements.len(), 1);
+
+        let stmt = match program.statements[0].clone() {
+            ast::Statement::ExpressionStatement(stmt) => stmt,
+            _ => panic!("Expected ExpressionStatement"),
+        };
+
+        let _ = match stmt.expression {
+            ast::Expression::CallExpression(func) => {
+                match *func.function {
+                    ast::Expression::Identifier(ident) => {
+                        assert_eq!(ident.token.literal, "add".to_string());
+                    }
+                    _ => panic!("Expected Identifier"),
+                }
+                assert_eq!(func.arguments.len(), 3);
+            }
+            _ => panic!("Expected CallExpression"),
+        };
+
+    }
 
     #[test]
     fn test_function_parameters_parsing() {
@@ -1075,6 +1159,21 @@ mod tests {
             Test {
                 input: "!(true == true)".to_string(),
                 _expected: "(!(true == true))".to_string(),
+            },
+
+            Test {
+                input: "a + add(b * c) + d".to_string(),
+                _expected: "((a + add((b * c))) + d)".to_string(),
+            },
+
+            Test {
+                input: "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))".to_string(),
+                _expected: "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))".to_string(),
+            },
+
+            Test {
+                input: "add(a + b + c * d / f + g)".to_string(),
+                _expected: "add((((a + b) + ((c * d) / f)) + g))".to_string(),
             },
 
         ];
