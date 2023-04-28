@@ -25,7 +25,7 @@ pub mod object_system {
             match self {
                 Object::Integer(i) => i.inspect(),
                 Object::Boolean(b) => b.inspect(),
-                Object::Null => "null".to_string(),            
+                Object::Null => "0".to_string(),            
             }
         }
     }
@@ -64,7 +64,7 @@ pub mod object_system {
     
     impl ObjectInterface for Null {
         fn inspect(&self) -> String {
-            format!("null")
+            format!("0")
         }
     
         fn object_type(&self) -> ObjectType {
@@ -78,6 +78,14 @@ pub mod object_system {
 pub fn eval(program: ast::Program) -> object_system::Object {
     let mut result = object_system::Object::Null;
     for statement in program.statements {
+        result = eval_statement(statement);
+    }
+    result
+}
+
+pub fn eval_block_statement(block: ast::BlockStatement) -> object_system::Object {
+    let mut result = object_system::Object::Null;
+    for statement in block.statements {
         result = eval_statement(statement);
     }
     result
@@ -113,7 +121,25 @@ fn eval_expression(expression: ast::Expression) -> object_system::Object {
             let right = eval_expression(*infix_expression.right);
             eval_infix_expression(infix_expression.operator, left, right)
         }
+        ast::Expression::IfExpression(if_expression) => {
+            eval_if_expression(if_expression)
+        }
         _ => object_system::Object::Null,
+    }
+}
+
+fn eval_if_expression(if_expression: ast::IfExpression) -> object_system::Object {
+    let condition = eval_expression(*if_expression.condition);
+    if match condition {
+        object_system::Object::Boolean(b) => b.value,
+        object_system::Object::Integer(_i) => true,
+        _ => false,
+    } {
+        eval_block_statement(if_expression.consequence)
+    } else if let Some(alternative) = if_expression.alternative {
+        eval_block_statement(alternative)
+    } else {
+        object_system::Object::Null
     }
 }
 
@@ -219,6 +245,35 @@ fn eval_bang_operator_expression(right: object_system::Object) -> object_system:
 mod tests {
     use crate::interpreter::*;
     use super::*;
+
+    #[test]
+    fn test_if_else_expressions() {
+        struct Test {
+            input: String,
+            expected: i64,
+        }
+
+        let inputs = vec![
+            Test {input: "if (true) { 10 }".to_string(), expected: 10},
+            Test {input: "if (false) { 10 }".to_string(), expected: 0},
+            Test {input: "if (1) { 10 }".to_string(), expected: 10},
+            Test {input: "if (1 < 2) { 10 }".to_string(), expected: 10},
+            Test {input: "if (1 > 2) { 10 }".to_string(), expected: 0},
+            Test {input: "if (1 > 2) { 10 } else { 20 }".to_string(), expected: 20},
+            Test {input: "if (1 < 2) { 10 } else { 20 }".to_string(), expected: 10},
+        ];
+
+        for input in inputs {
+            let lexer = lexer::Lexer::new(input.input);
+            let mut parser = parser::Parser::new(lexer);
+            let program = match parser.parse_program() {
+                Ok(program) => program,
+                Err(_) => panic!("Error parsing program"),
+            };
+            let evaluated = eval(program);
+            assert_eq!(evaluated.inspect(), input.expected.to_string());
+        }
+    }
 
     #[test]
     fn test_bang_operator() {
