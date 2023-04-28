@@ -3,17 +3,78 @@ use crate::interpreter::{ast, lexer, tokens};
 
 use super::ast::BlockStatement;
 
+/// `Parser` is a struct that represents a parser for a programming language.
+/// ```
+/// use monkey_lang::interpreter::lexer::Lexer;
+/// use monkey_lang::interpreter::parser::Parser;
+/// 
+/// let input = "1 + 2".to_string();
+/// let lexer = Lexer::new(input);
+/// let mut parser = Parser::new(lexer);
+/// assert_eq!(parser.cur_token.literal, "1");
+/// assert_eq!(parser.peek_token.literal, "+");
+/// parser.next_token();
+/// assert_eq!(parser.cur_token.literal, "+");
+/// assert_eq!(parser.peek_token.literal, "2");
+/// 
+/// ```
 pub struct Parser {
-    lex: lexer::Lexer,
-    cur_token: tokens::Token,
-    peek_token: tokens::Token,
-    errors: Vec<String>,
+    lex: lexer::Lexer, // Lexer used by the parser
+    pub cur_token: tokens::Token, // Current token being parsed
+    pub peek_token: tokens::Token, // Next token to be parsed
+    errors: Vec<String>, // List of error messages encountered during parsing
 
+    // HashMaps containing functions for parsing different types of tokens
     prefix_parse_functions: HashMap<tokens::TokenType, fn(&mut Parser) -> ast::Expression>,
     infix_parse_functions: HashMap<tokens::TokenType, fn(&mut Parser, &ast::Expression) -> ast::Expression>,
 }
 
+
+/// `Parser` implementation
+
 impl Parser {
+    /// `new` creates a new `Parser` struct
+    /// ```
+    /// use monkey_lang::interpreter::lexer::Lexer;
+    /// use monkey_lang::interpreter::parser::Parser;
+    /// 
+    /// let input = "1 + 2".to_string();
+    /// let lexer = Lexer::new(input);
+    /// let mut parser = Parser::new(lexer);
+    /// assert_eq!(parser.cur_token.literal, "1");
+    /// assert_eq!(parser.peek_token.literal, "+");
+    /// parser.next_token();
+    /// assert_eq!(parser.cur_token.literal, "+");
+    /// assert_eq!(parser.peek_token.literal, "2");
+    ///
+    /// ```
+    /// 
+    /// ```
+    /// use monkey_lang::interpreter::lexer::Lexer;
+    /// use monkey_lang::interpreter::parser::Parser;
+    /// 
+    /// let input = "let x = 5;".to_string();
+    /// let lexer = Lexer::new(input);
+    /// let mut parser = Parser::new(lexer);
+    /// assert_eq!(parser.cur_token.literal, "let");
+    /// assert_eq!(parser.peek_token.literal, "x");
+    /// parser.next_token();
+    /// assert_eq!(parser.cur_token.literal, "x");
+    /// assert_eq!(parser.peek_token.literal, "=");
+    /// parser.next_token();
+    /// assert_eq!(parser.cur_token.literal, "=");
+    /// assert_eq!(parser.peek_token.literal, "5");
+    /// parser.next_token();
+    /// assert_eq!(parser.cur_token.literal, "5");
+    /// assert_eq!(parser.peek_token.literal, ";");
+    /// parser.next_token();
+    /// assert_eq!(parser.cur_token.literal, ";");
+    /// assert_eq!(parser.peek_token.literal, "");
+    /// parser.next_token();
+    /// assert_eq!(parser.cur_token.literal, "");
+    /// assert_eq!(parser.peek_token.literal, "");
+    /// 
+    /// ```
     pub fn new(lex: lexer::Lexer) -> Parser {
         let mut parser = Parser {
             lex,
@@ -41,7 +102,8 @@ impl Parser {
         self.register_prefix_function(tokens::TokenType::TRUE, Parser::parse_boolean);
         self.register_prefix_function(tokens::TokenType::FALSE, Parser::parse_boolean);
         self.register_prefix_function(tokens::TokenType::LPAREN, Parser::parse_grouped_expression);
-        self.register_prefix_function(tokens::TokenType::IF, Parser::parse_if_expression)
+        self.register_prefix_function(tokens::TokenType::IF, Parser::parse_if_expression);
+        self.register_prefix_function(tokens::TokenType::FUNCTION, Parser::parse_function_literal);
     }
 
     fn register_prefix_function(&mut self, t: tokens::TokenType, f: fn(&mut Parser) -> ast::Expression) {
@@ -54,7 +116,7 @@ impl Parser {
         self.register_infix_function(tokens::TokenType::SLASH, Parser::parse_infix_expression);
         self.register_infix_function(tokens::TokenType::ASTERISK, Parser::parse_infix_expression);
         self.register_infix_function(tokens::TokenType::EQ, Parser::parse_infix_expression);
-        self.register_infix_function(tokens::TokenType::NOT_EQ, Parser::parse_infix_expression);
+        self.register_infix_function(tokens::TokenType::NotEq, Parser::parse_infix_expression);
         self.register_infix_function(tokens::TokenType::LT, Parser::parse_infix_expression);
         self.register_infix_function(tokens::TokenType::GT, Parser::parse_infix_expression);
     }
@@ -188,6 +250,91 @@ impl Parser {
         }
 
         return exp;
+    }
+
+    fn parse_function_literal(&mut self) -> ast::Expression {
+        let mut expression = ast::FunctionLiteral {
+            token: self.cur_token.clone(),
+            parameters: vec![],
+            body: ast::BlockStatement {
+                token: tokens::Token {
+                    token_type: tokens::TokenType::LBRACE,
+                    literal: "{".to_string(),
+                },
+                statements: vec![],
+            },
+        };
+        
+        match self.assert_peek(tokens::TokenType::LPAREN) {
+            Ok(_) => (),
+            Err(e) => {
+                panic!("Error parsing function literal: {}", e);
+            }
+        }
+
+        expression.parameters = match self.parse_function_parameters() {
+            Ok(params) => params,
+            Err(e) => {
+                panic!("Error parsing function literal: {}", e);
+            }
+        };
+
+        match self.assert_peek(tokens::TokenType::LBRACE) {
+            Ok(_) => (),
+            Err(e) => {
+                panic!("Error parsing function literal: {}", e);
+            }
+        }
+
+        expression.body = self.parse_block_statement();
+
+        return ast::Expression::FunctionLiteral(expression);
+
+    }
+
+    fn parse_function_parameters(&mut self) -> Result<Vec<ast::Identifier>, String> {
+        let mut identifiers = vec![];
+
+        loop {
+            match self.assert_peek(tokens::TokenType::IDENT) {
+                Ok(_) => (),
+                Err(_) => {
+                    match self.assert_peek(tokens::TokenType::RPAREN) {
+                        Ok(_) => {
+                            break;
+                        },
+                        Err(e) => {
+                            return Err(e);
+                        }
+                    }
+                }
+            }
+
+            let ident = ast::Identifier {
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            };
+
+            identifiers.push(ident);
+
+            match self.assert_peek(tokens::TokenType::COMMA) {
+                Ok(_) => {},
+                Err(_) => {
+                    match self.assert_peek(tokens::TokenType::RPAREN) {
+                        Ok(_) => {
+                            break;
+                        },
+                        Err(e) => {
+                            return Err(e);
+                        }
+                    }
+                }
+            }
+
+        }
+
+        return Ok(identifiers);
+
     }
 
     fn parse_if_expression(&mut self) -> ast::Expression {
@@ -374,7 +521,7 @@ impl Parser {
     }
 
     fn parse_return_statement(&mut self) -> Result<ast::ReturnStatement, String> {
-        let mut statement = ast::ReturnStatement {
+        let statement = ast::ReturnStatement {
             token: self.cur_token.clone(),
             return_value: ast::Expression::Identifier(ast::Identifier {
                 token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
@@ -479,6 +626,131 @@ mod tests {
 
     use crate::interpreter::*;
     use super::*;
+
+    #[test]
+    fn test_function_parameters_parsing() {
+        struct Test {
+            input: String,
+            expected_params: Vec<String>,
+        }
+
+        let inputs = vec![
+            Test {
+                input: "fn() {};".to_string(),
+                expected_params: vec![],
+            },
+            Test {
+                input: "fn(x) {};".to_string(),
+                expected_params: vec!["x".to_string()],
+            },
+            Test {
+                input: "fn(x, y, z) {};".to_string(),
+                expected_params: vec!["x".to_string(), "y".to_string(), "z".to_string()],
+            },
+        ];
+
+        for input in inputs {
+            let lexer = lexer::Lexer::new(input.input);
+            let mut parser = Parser::new(lexer);
+            let program = match parser.parse_program() {
+                Ok(program) => program,
+                Err(e) => {
+                    panic!("{}", e);
+                }
+            };
+
+            let stmt = &program.statements[0];
+
+            match stmt {
+                ast::Statement::ExpressionStatement(stmt) => {
+                    match &stmt.expression {
+                        ast::Expression::FunctionLiteral(exp) => {
+                            assert_eq!(exp.parameters.len(), input.expected_params.len());
+
+                            for (i, param) in exp.parameters.iter().enumerate() {
+                                assert_eq!(param.value, input.expected_params[i]);
+                            }
+                        },
+                        _ => {
+                            panic!("Expected function literal");
+                        }
+                    }
+                },
+                _ => {
+                    panic!("Expected expression statement");
+                }
+            }
+        }
+    }
+
+
+    #[test]
+    fn test_function_literal_parsing() {
+        let input = "fn(x, y) { x + y; }";
+
+        let lexer = lexer::Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => {
+                panic!("{}", e);
+            }
+        };
+
+        assert_eq!(program.statements.len(), 1);
+
+        let stmt = &program.statements[0];
+
+        match stmt {
+            ast::Statement::ExpressionStatement(stmt) => {
+                match &stmt.expression {
+                    ast::Expression::FunctionLiteral(exp) => {
+                        assert_eq!(exp.parameters.len(), 2);
+                        assert_eq!(exp.parameters[0].value, "x");
+                        assert_eq!(exp.parameters[1].value, "y");
+
+                        assert_eq!(exp.body.statements.len(), 1);
+
+                        match &exp.body.statements[0] {
+                            ast::Statement::ExpressionStatement(stmt) => {
+                                match &stmt.expression {
+                                    ast::Expression::InfixExpression(exp) => {
+                                        assert_eq!(exp.operator, "+");
+                                        assert_eq!(*exp.left, ast::Expression::Identifier(ast::Identifier {
+                                            token: tokens::Token {
+                                                token_type: tokens::TokenType::IDENT,
+                                                literal: "x".to_string(),
+                                            },
+                                            value: "x".to_string(),
+                                        }));
+                                        assert_eq!(*exp.right, ast::Expression::Identifier(ast::Identifier {
+                                            token: tokens::Token {
+                                                token_type: tokens::TokenType::IDENT,
+                                                literal: "y".to_string(),
+                                            },
+                                            value: "y".to_string(),
+                                        }));
+                                    },
+                                    _ => {
+                                        panic!("Expected InfixExpression, got {:?}", stmt.expression);
+                                    }
+                                }
+                            },
+                            _ => {
+                                panic!("Expected ExpressionStatement, got {:?}", exp.body.statements[0]);
+                            }
+                        }
+                    },
+                    _ => {
+                        panic!("Expected FunctionLiteral, got {:?}", stmt.expression);
+                    }
+                }
+            },
+            _ => {
+                panic!("Expected ExpressionStatement, got {:?}", program.statements[0]);
+            }
+        }
+    }
 
     #[test]
     fn test_if_expression() {
@@ -700,117 +972,117 @@ mod tests {
     fn test_infix_expression_precedence() {
         struct Test {
             input: String,
-            expected: String,
+            _expected: String,
         }
 
         // creating an array of inputs
         let inputs = vec![
             Test {
                 input: "!-a".to_string(),
-                expected: "(!(-a))".to_string(),
+                _expected: "(!(-a))".to_string(),
             },
 
             Test {
                 input: "a + b + c".to_string(),
-                expected: "((a + b) + c)".to_string(),
+                _expected: "((a + b) + c)".to_string(),
             },
 
             Test {
                 input: "a + b - c".to_string(),
-                expected: "((a + b) - c)".to_string(),
+                _expected: "((a + b) - c)".to_string(),
             },
 
             Test {
                 input: "a * b * c".to_string(),
-                expected: "((a * b) * c)".to_string(),
+                _expected: "((a * b) * c)".to_string(),
             },
 
             Test {
                 input: "a * b / c".to_string(),
-                expected: "((a * b) / c)".to_string(),
+                _expected: "((a * b) / c)".to_string(),
             },
 
             Test {
                 input: "a + b / c".to_string(),
-                expected: "(a + (b / c))".to_string(),
+                _expected: "(a + (b / c))".to_string(),
             },
 
             Test {
                 input: "a + b * c + d / e - f".to_string(),
-                expected: "(((a + (b * c)) + (d / e)) - f)".to_string(),
+                _expected: "(((a + (b * c)) + (d / e)) - f)".to_string(),
             },
 
             Test {
                 input: "3 + 4; -5 * 5".to_string(),
-                expected: "(3 + 4)((-5) * 5)".to_string(),
+                _expected: "(3 + 4)((-5) * 5)".to_string(),
             },
 
             Test {
                 input: "5 > 4 == 3 < 4".to_string(),
-                expected: "((5 > 4) == (3 < 4))".to_string(),
+                _expected: "((5 > 4) == (3 < 4))".to_string(),
             },
 
             Test {
                 input: "5 < 4 != 3 > 4".to_string(),
-                expected: "((5 < 4) != (3 > 4))".to_string(),
+                _expected: "((5 < 4) != (3 > 4))".to_string(),
             },
 
             Test {
                 input: "3 + 4 * 5 == 3 * 1 + 4 * 5".to_string(),
-                expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))".to_string(),
+                _expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))".to_string(),
             },
 
             Test {
                 input: "true".to_string(),
-                expected: "true".to_string(),
+                _expected: "true".to_string(),
             },
 
             Test {
                 input: "false".to_string(),
-                expected: "false".to_string(),
+                _expected: "false".to_string(),
             },
 
             Test {
                 input: "3 > 5 == false".to_string(),
-                expected: "((3 > 5) == false)".to_string(),
+                _expected: "((3 > 5) == false)".to_string(),
             },
 
             Test {
                 input: "3 < 5 == true".to_string(),
-                expected: "((3 < 5) == true)".to_string(),
+                _expected: "((3 < 5) == true)".to_string(),
             },
 
             Test {
                 input: "1 + (2 + 3) + 4".to_string(),
-                expected: "((1 + (2 + 3)) + 4)".to_string(),
+                _expected: "((1 + (2 + 3)) + 4)".to_string(),
             },
 
             Test {
                 input: "(5 + 5) * 2".to_string(),
-                expected: "((5 + 5) * 2)".to_string(),
+                _expected: "((5 + 5) * 2)".to_string(),
             },
 
             Test {
                 input: "2 / (5 + 5)".to_string(),
-                expected: "(2 / (5 + 5))".to_string(),
+                _expected: "(2 / (5 + 5))".to_string(),
             },
 
             Test {
                 input: "-(5 + 5)".to_string(),
-                expected: "(-(5 + 5))".to_string(),
+                _expected: "(-(5 + 5))".to_string(),
             },
 
             Test {
                 input: "!(true == true)".to_string(),
-                expected: "(!(true == true))".to_string(),
+                _expected: "(!(true == true))".to_string(),
             },
 
         ];
 
         for input in inputs {
-            let mut l = crate::interpreter::lexer::Lexer::new(input.input);
+            let l = crate::interpreter::lexer::Lexer::new(input.input);
             let mut p = Parser::new(l);
-            let program = p.parse_program();
+            let _program = p.parse_program();
 
             assert!(p.errors.is_empty());
 
@@ -818,7 +1090,7 @@ mod tests {
             // we need a funtion to print out the parsed program
 
             // let actual = program.to_string();
-            // assert_eq!(actual, input.expected);
+            // assert_eq!(actual, input._expected);
         }
     }
 

@@ -1,5 +1,3 @@
-use std::default;
-
 use crate::interpreter::tokens::*;
 
 pub struct Program {
@@ -63,6 +61,14 @@ pub enum Expression {
     PrefixExpression(PrefixExpression),
     InfixExpression(InfixExpression),
     IfExpression(IfExpression),
+    FunctionLiteral(FunctionLiteral),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionLiteral {
+    pub token: Token,
+    pub parameters: Vec<Identifier>,
+    pub body: BlockStatement,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -130,7 +136,7 @@ impl Precedence {
     pub fn get_precedence(operator: TokenType) -> Precedence {
         match operator {
             TokenType::EQ => Precedence::EQUALS,
-            TokenType::NOT_EQ => Precedence::EQUALS,
+            TokenType::NotEq => Precedence::EQUALS,
             TokenType::LT => Precedence::LESSGREATER,
             TokenType::GT => Precedence::LESSGREATER,
             TokenType::PLUS => Precedence::SUM,

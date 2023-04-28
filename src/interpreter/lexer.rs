@@ -63,7 +63,7 @@ pub struct Lexer {
 /// ```
 impl Lexer {
     pub fn new (input: String) -> Lexer {
-        let mut l = Lexer {
+        let l = Lexer {
             input,
             position: 0, // current position in input (points to current char)
             ch: '\0' // current character under examination
@@ -76,7 +76,7 @@ impl Lexer {
     }
 
     // start the lexer code on a given input
-    pub fn tokenize(&mut self, input: &str) -> Vec<Token> {
+    pub fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         while let Some(token) = self.next_token() {
             tokens.push(token);
@@ -131,7 +131,7 @@ impl Lexer {
                 if self.peek_char() == '=' {
                     self.advance();
                     self.advance();
-                    Token::new(TokenType::NOT_EQ, self.input[self.position - 2..self.position].to_string())
+                    Token::new(TokenType::NotEq, self.input[self.position - 2..self.position].to_string())
                 } else {
                     self.advance();
                     Token::new(TokenType::BANG, self.ch.to_string())
@@ -255,7 +255,7 @@ mod tests {
             Token::new(TokenType::ASSIGN, "=".to_string()),
             Token::new(TokenType::EOF, "".to_string()),
         ];
-        let tokens = lexer.tokenize(input);
+        let tokens = lexer.tokenize();
         assert_eq!(tokens, expected_tokens);
     }
 
@@ -267,7 +267,7 @@ mod tests {
             Token::new(TokenType::IDENT, "hello".to_string()),
             Token::new(TokenType::EOF, "".to_string()),
         ];
-        let tokens = lexer.tokenize(input);
+        let tokens = lexer.tokenize();
         assert_eq!(tokens, expected_tokens);
     }
 
@@ -280,7 +280,7 @@ mod tests {
             Token::new(TokenType::INT, "567".to_string()),
             Token::new(TokenType::EOF, "".to_string()),
         ];
-        let tokens = lexer.tokenize(input);
+        let tokens = lexer.tokenize();
         assert_eq!(tokens, expected_tokens);
     }
 
@@ -300,7 +300,7 @@ mod tests {
             Token::new(TokenType::SEMICOLON, ";".to_string()),
             Token::new(TokenType::EOF, "".to_string()),
         ];
-        let tokens = lexer.tokenize(input);
+        let tokens = lexer.tokenize();
         assert_eq!(tokens, expected_tokens);
     }
     
@@ -323,7 +323,7 @@ mod tests {
             Token::new(TokenType::RETURN, "return".to_string()),
             Token::new(TokenType::EOF, "".to_string()),
         ];
-        let tokens = lexer.tokenize(input);
+        let tokens = lexer.tokenize();
         assert_eq!(tokens, expected_tokens);
     }
 
@@ -349,7 +349,7 @@ mod tests {
             Token::new(TokenType::TRUE, "true".to_string()),
             Token::new(TokenType::EOF, "".to_string()),
         ];
-        let tokens = lexer.tokenize(input);
+        let tokens = lexer.tokenize();
         assert_eq!(tokens, expected_tokens);
     }
     
@@ -403,7 +403,7 @@ mod tests {
             Token::new(TokenType::SEMICOLON, ";".to_string()),
             Token::new(TokenType::EOF, "".to_string()),
         ];
-        let tokens = lexer.tokenize(input);
+        let tokens = lexer.tokenize();
         assert_eq!(tokens, expected_tokens);
     }
 }
