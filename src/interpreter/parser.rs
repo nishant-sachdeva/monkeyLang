@@ -572,7 +572,7 @@ impl Parser {
     }
 
     fn parse_return_statement(&mut self) -> Result<ast::ReturnStatement, String> {
-        let statement = ast::ReturnStatement {
+        let mut statement = ast::ReturnStatement {
             token: self.cur_token.clone(),
             return_value: ast::Expression::Identifier(ast::Identifier {
                 token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
@@ -581,8 +581,14 @@ impl Parser {
         };
 
         self.next_token();
-
-        // TODO :: parseExpression , followed by assert semicolon
+        statement.return_value = match self.parse_expression(ast::Precedence::LOWEST) {
+            Ok(exp) => exp,
+            Err(e) => {
+                return Err(
+                    format!("{}", e)
+                );
+            }
+        };
 
         while !self.cur_token_is(tokens::TokenType::SEMICOLON) {
             self.next_token();
@@ -627,9 +633,18 @@ impl Parser {
             }
         }
 
-        // TODO :: parseExpression , followed by assert semicolon
+        self.next_token();
 
-        while !self.cur_token_is(tokens::TokenType::SEMICOLON) {
+        stmt.value = match self.parse_expression(ast::Precedence::LOWEST) {
+            Ok(exp) => exp,
+            Err(e) => {
+                return Err(
+                    format!("{}", e)
+                );
+            }
+        };
+
+        if self.peek_token_is(tokens::TokenType::SEMICOLON) {
             self.next_token();
         }
 
@@ -1439,13 +1454,14 @@ mod tests {
                     assert_eq!(stmt.name.value, "five");
                     assert_eq!(stmt.name.token.token_type, tokens::TokenType::IDENT);
 
-                    // confirm that the value is an illegal token
-                    assert_eq!(stmt.value,
-                        ast::Expression::Identifier(ast::Identifier {
-                            token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
-                            value: "".to_string()
-                        })
-                    );
+                    // confirm that the value is an integer literal and is equal to 5
+                    let _ = match stmt.value {
+                        ast::Expression::IntegerLiteral(literal) => {
+                            assert_eq!(literal.value, 5);
+                            assert_eq!(literal.token.literal, "5");
+                        }
+                        _ => panic!("Expected IntegerLiteral"),
+                    };
                 }
                 _ => panic!("Expected Let Statement"),
             }
@@ -1457,34 +1473,60 @@ mod tests {
     
     #[test]
     fn test_multiple_let_statements() {
-        let input = "let five = 5; let ten = 10; let result = 45;";
-        let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
-        let program = match parser.parse_program() {
-            Ok(program) => program,
-            Err(e) => panic!("Error parsing program: {}", e),
-        };
-        // confirm that the program has 3 statements
-        assert_eq!(program.statements.len(), 3);
+        struct Test {
+            input: String,
+            name: String,
+            value: i64,
+        }
 
-        for statement in program.statements {
-            // confirm that the statement is a let statement
-            match statement {
-                ast::Statement::LetStatement(stmt) => {
-                    assert_eq!(stmt.token.token_type, tokens::TokenType::LET);
-                    assert_eq!(stmt.name.token.token_type, tokens::TokenType::IDENT);
+        let inputs = vec![
+            Test {
+                input: "let x = 5;".to_string(),
+                name: "x".to_string(),
+                value: 5,
+            },
+            Test {
+                input: "let y = 10;".to_string(),
+                name: "y".to_string(),
+                value: 10,
+            },
+            Test {
+                input: "let foobar = 838383;".to_string(),
+                name: "foobar".to_string(),
+                value: 838383,
+            },
+        ];
+        
+        for input in inputs {
+            let mut parser = Parser::new(lexer::Lexer::new(input.input));
+            let program = match parser.parse_program() {
+                Ok(program) => program,
+                Err(e) => panic!("Error parsing program: {}", e),
+            };
+            // confirm that the program has 3 statements
+            assert_eq!(program.statements.len(), 1);
 
-                    // confirm that the value is Illegal Token
-                    assert_eq!(stmt.value,
-                        ast::Expression::Identifier(ast::Identifier {
-                            token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
-                            value: "".to_string()
-    
-                        })
-                    );
+            for statement in program.statements {
+                // confirm that the statement is a let statement
+                match statement {
+                    ast::Statement::LetStatement(stmt) => {
+                        assert_eq!(stmt.token.token_type, tokens::TokenType::LET);
+                        assert_eq!(stmt.name.token.token_type, tokens::TokenType::IDENT);
+                        assert_eq!(stmt.name.value, input.name);
+                        // confirm that the value is an integer literal
+                        let _ = match stmt.value {
+                            ast::Expression::IntegerLiteral(literal) => {
+
+                                assert_eq!(literal.value, input.value);
+                                assert_eq!(literal.token.literal, input.value.to_string());
+                            }
+                            _ => panic!("Expected IntegerLiteral"),
+                        };
+                    }
+                    _ => panic!("Expected Let Statement"),
                 }
-                _ => panic!("Expected Let Statement"),
-            }
 
+            }
         }
 
     }
@@ -1508,9 +1550,9 @@ mod tests {
                 ast::Statement::ReturnStatement(stmt) => {
                     assert_eq!(stmt.token.token_type, tokens::TokenType::RETURN);
                     assert_eq!(stmt.return_value,
-                        ast::Expression::Identifier(ast::Identifier {
-                            token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
-                            value: "".to_string()
+                        ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+                            token: tokens::Token::new(tokens::TokenType::INT, "5".to_string()),
+                            value: 5
                         })
                     );
                 }
@@ -1522,7 +1564,7 @@ mod tests {
 
     
     #[test]
-    // #[should_panic(expected = "Expected next token to be EXPRESSION, got SEMICOLON instead")]
+    #[should_panic(expected = "No prefix parse function for SEMICOLON found")]
     fn test_return_statement_negative() {
         let input = "return ;";
         let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
@@ -1535,32 +1577,51 @@ mod tests {
 
     #[test]
     fn test_multiple_return_statements() {
-        let input = "return 5; return 10; return add(5,10);";
-        let mut parser = Parser::new(lexer::Lexer::new(input.to_string()));
-        let program = match parser.parse_program() {
-            Ok(program) => program,
-            Err(e) => panic!("Error parsing program: {}", e),
-        };
-        // confirm that the program has 3 statements
-        assert_eq!(program.statements.len(), 3);
-
-        for statement in program.statements {
-            // confirm that the statement is a let statement
-            match statement {
-                ast::Statement::ReturnStatement(stmt) => {
-                    assert_eq!(stmt.token.token_type, tokens::TokenType::RETURN);
-                    assert_eq!(stmt.return_value,
-                        ast::Expression::Identifier(ast::Identifier {
-                            token: tokens::Token::new(tokens::TokenType::ILLEGAL, "".to_string()),
-                            value: "".to_string()
-                        })
-                    );
-                }
-                _ => panic!("Expected Return Statement"),
-            }
-
+        struct Test {
+            input: String,
+            expected: Vec<i64>,
         }
 
+        let inputs = vec![
+            Test {
+                input: "return 5;".to_string(),
+                expected: vec![5],
+            },
+            Test {
+                input: "return 10;".to_string(),
+                expected: vec![10],
+            },
+            Test {
+                input: "return 993322;".to_string(),
+                expected: vec![993322],
+            },
+        ];
+
+        for input in inputs {
+            let mut parser = Parser::new(lexer::Lexer::new(input.input));
+            let program = match parser.parse_program() {
+                Ok(program) => program,
+                Err(e) => panic!("Error parsing program: {}", e),
+            };
+            // confirm that the program has 3 statements
+            assert_eq!(program.statements.len(), 1);
+    
+            for statement in program.statements {
+                // confirm that the statement is a return statement
+                match statement {
+                    ast::Statement::ReturnStatement(stmt) => {
+                        assert_eq!(stmt.token.token_type, tokens::TokenType::RETURN);
+                        assert_eq!(stmt.return_value,
+                            ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+                                token: tokens::Token::new(tokens::TokenType::INT, input.expected[0].to_string()),
+                                value: input.expected[0]
+                            })                        
+                        );
+                    }
+                    _ => panic!("Expected Return Statement"),
+                }
+    
+            }
+        }
     }
-   
 }
