@@ -6,6 +6,7 @@ pub mod object_system {
     pub enum Object {
         Integer(Integer),
         Boolean(Boolean),
+        ReturnValue(ReturnValue),
         Null,
     }
     
@@ -25,8 +26,32 @@ pub mod object_system {
             match self {
                 Object::Integer(i) => i.inspect(),
                 Object::Boolean(b) => b.inspect(),
+                Object::ReturnValue(rv) => rv.inspect(),
                 Object::Null => "0".to_string(),            
             }
+        }
+
+        pub fn object_type(&self) -> ObjectType {
+            match self {
+                Object::Integer(i) => i.object_type(),
+                Object::Boolean(b) => b.object_type(),
+                Object::ReturnValue(rv) => rv.object_type(),
+                Object::Null => ObjectType::NULL,            
+            }
+        }
+    }
+
+    pub struct ReturnValue {
+        pub value: Box<Object>,
+    }
+
+    impl ObjectInterface for ReturnValue {
+        fn inspect(&self) -> String {
+            self.value.inspect()
+        }
+
+        fn object_type(&self) -> ObjectType {
+            self.value.object_type()
         }
     }
     
@@ -76,17 +101,20 @@ pub mod object_system {
 
 
 pub fn eval(program: ast::Program) -> object_system::Object {
-    let mut result = object_system::Object::Null;
-    for statement in program.statements {
-        result = eval_statement(statement);
-    }
-    result
+    eval_statements(program.statements)
 }
 
 pub fn eval_block_statement(block: ast::BlockStatement) -> object_system::Object {
+    eval_statements(block.statements)
+}
+
+fn eval_statements(statements: Vec<ast::Statement>) -> object_system::Object {
     let mut result = object_system::Object::Null;
-    for statement in block.statements {
+    for statement in statements {
         result = eval_statement(statement);
+        if let object_system::Object::ReturnValue(_) = result {
+            return result;
+        }
     }
     result
 }
@@ -95,6 +123,11 @@ fn eval_statement(statement: ast::Statement) -> object_system::Object {
     match statement {
         ast::Statement::ExpressionStatement(expression_statement) => {
             eval_expression(expression_statement.expression)
+        }
+        ast::Statement::ReturnStatement(return_statement) => {
+            object_system::Object::ReturnValue(object_system::ReturnValue {
+                value: Box::new(eval_expression(return_statement.return_value)),
+            })
         }
         _ => object_system::Object::Null,
     }
@@ -245,6 +278,36 @@ fn eval_bang_operator_expression(right: object_system::Object) -> object_system:
 mod tests {
     use crate::interpreter::*;
     use super::*;
+
+    #[test]
+    fn test_return_statements() {
+        struct Test {
+            input: String,
+            expected: i64,
+        }
+
+        let inputs = vec![
+            Test {input: "return 10;".to_string(), expected: 10},
+            Test {input: "return 10; 9;".to_string(), expected: 10},
+            Test {input: "return 2 * 5; 9;".to_string(), expected: 10},
+            Test {input: "9; return 2 * 5; 9;".to_string(), expected: 10},
+            Test {input: "if (10 > 1) { if (10 > 1) { return 10; } return 1; }".to_string(), expected: 10},
+        ];
+
+        for input in inputs {
+            let lexer = lexer::Lexer::new(input.input);
+            let mut parser = parser::Parser::new(lexer);
+            let program = match parser.parse_program() {
+                Ok(program) => program,
+                Err(_) => panic!("Parser returned None"),
+            };
+
+            // send program for evaluation
+            let result = eval(program);
+            assert_eq!(result.inspect(), input.expected.to_string());
+
+        }
+    }
 
     #[test]
     fn test_if_else_expressions() {
