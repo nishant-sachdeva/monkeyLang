@@ -1,8 +1,44 @@
 use crate::interpreter::tokens::*;
 
+/// Represents a node in the abstract syntax tree (AST) of the Monkey programming language.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use monkey_lang::interpreter::ast::{Program, Statement, LetStatement, Identifier, Expression, IntegerLiteral};
+/// use monkey_lang::interpreter::tokens::{Token, TokenType};
+/// 
+/// let program = Program {
+///    statements: vec![
+///       Statement::LetStatement(LetStatement {
+///         token: Token::new(TokenType::LET, "let".to_string()),
+///        name: Identifier {
+///          token: Token::new(TokenType::IDENT, "myVar".to_string()),
+///         value: "myVar".to_string(),
+///       },
+///      value: Expression::Identifier(Identifier {
+///       token: Token::new(TokenType::IDENT, "anotherVar".to_string()),
+///      value: "anotherVar".to_string(),
+///    }),
+/// }),
+/// Statement::LetStatement(LetStatement {
+///  token: Token::new(TokenType::LET, "let".to_string()),
+/// name: Identifier {
+/// token: Token::new(TokenType::IDENT, "anotherVar".to_string()),
+/// value: "anotherVar".to_string(),
+/// },
+/// value: Expression::IntegerLiteral(IntegerLiteral {
+///     token: Token::new(TokenType::INT, "5".to_string()),
+///    value: 5,
+/// }),
+/// }),
+/// ],
+/// };
+/// ```
 pub struct Program {
     pub statements: Vec<Statement>,
 }
+
 
 impl Program {
     pub fn new() -> Program {

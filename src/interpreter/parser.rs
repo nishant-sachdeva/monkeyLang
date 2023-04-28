@@ -148,6 +148,7 @@ impl Parser {
         Ok(program)
     }
 
+    /// Parses a statement
     fn parse_statement(&mut self) -> Result<ast::Statement, String> {
         match self.cur_token.token_type {
             tokens::TokenType::LET => Ok(
