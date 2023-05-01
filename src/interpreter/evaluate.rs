@@ -7,12 +7,14 @@ pub mod object_system {
         Integer(Integer),
         Boolean(Boolean),
         ReturnValue(ReturnValue),
+        EvalError(EvalError),
         Null,
     }
     
     pub enum ObjectType {
         INTEGER,
         BOOLEAN,
+        EvalError,
         NULL,
     }
     
@@ -27,6 +29,7 @@ pub mod object_system {
                 Object::Integer(i) => i.inspect(),
                 Object::Boolean(b) => b.inspect(),
                 Object::ReturnValue(rv) => rv.inspect(),
+                Object::EvalError(eo) => eo.inspect(),
                 Object::Null => "0".to_string(),            
             }
         }
@@ -36,8 +39,23 @@ pub mod object_system {
                 Object::Integer(i) => i.object_type(),
                 Object::Boolean(b) => b.object_type(),
                 Object::ReturnValue(rv) => rv.object_type(),
+                Object::EvalError(eo) => eo.object_type(),
                 Object::Null => ObjectType::NULL,            
             }
+        }
+    }
+
+    pub struct EvalError {
+        pub message: String,
+    }
+
+    impl ObjectInterface for EvalError {
+        fn inspect(&self) -> String {
+            format!("ERROR: {}", self.message)
+        }
+
+        fn object_type(&self) -> ObjectType {
+            ObjectType::EvalError
         }
     }
 
@@ -278,6 +296,39 @@ fn eval_bang_operator_expression(right: object_system::Object) -> object_system:
 mod tests {
     use crate::interpreter::*;
     use super::*;
+
+    #[test]
+    fn test_error_handling() {
+        struct Test {
+            input: String,
+            expected: String,
+        }
+
+        let inputs = vec![
+            Test {input: "5 + true;".to_string(), expected: "type mismatch: INTEGER + BOOLEAN".to_string()},
+            Test {input: "5 + true; 5;".to_string(), expected: "type mismatch: INTEGER + BOOLEAN".to_string()},
+            Test {input: "-true".to_string(), expected: "unknown operator: -BOOLEAN".to_string()},
+            Test {input: "true + false;".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
+            Test {input: "5; true + false; 5".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
+            Test {input: "if (10 > 1) { true + false; }".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
+            Test {input: "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
+        ];
+
+        for input in inputs {
+            let lexer = lexer::Lexer::new(input.input);
+            let mut parser = parser::Parser::new(lexer);
+            let program = match parser.parse_program() {
+                Ok(program) => program,
+                Err(err) => panic!("ParserError: {:?}", err),
+            };
+
+            let result = eval(program);
+            match result {
+                object_system::Object::EvalError(error) => assert_eq!(error.message, input.expected),
+                _ => panic!("result is not error object"),
+            }
+        }
+    }
 
     #[test]
     fn test_return_statements() {
