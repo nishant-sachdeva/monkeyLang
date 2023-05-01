@@ -18,23 +18,23 @@ pub mod object_system {
         NULL,
     }
     
-    trait ObjectInterface {
-        fn inspect(&self) -> String;
+    pub trait ObjectInterface {
+        fn log(&self) -> String;
         fn object_type(&self) -> ObjectType;
     }
 
-    impl Object {
-        pub fn inspect(&self) -> String {
+    impl ObjectInterface for Object {
+        fn log(&self) -> String {
             match self {
-                Object::Integer(i) => i.inspect(),
-                Object::Boolean(b) => b.inspect(),
-                Object::ReturnValue(rv) => rv.inspect(),
-                Object::EvalError(eo) => eo.inspect(),
+                Object::Integer(i) => i.log(),
+                Object::Boolean(b) => b.log(),
+                Object::ReturnValue(rv) => rv.log(),
+                Object::EvalError(eo) => eo.log(),
                 Object::Null => "0".to_string(),            
             }
         }
 
-        pub fn object_type(&self) -> ObjectType {
+        fn object_type(&self) -> ObjectType {
             match self {
                 Object::Integer(i) => i.object_type(),
                 Object::Boolean(b) => b.object_type(),
@@ -50,7 +50,7 @@ pub mod object_system {
     }
 
     impl ObjectInterface for EvalError {
-        fn inspect(&self) -> String {
+        fn log(&self) -> String {
             format!("ERROR: {}", self.message)
         }
 
@@ -64,8 +64,8 @@ pub mod object_system {
     }
 
     impl ObjectInterface for ReturnValue {
-        fn inspect(&self) -> String {
-            self.value.inspect()
+        fn log(&self) -> String {
+            self.value.log()
         }
 
         fn object_type(&self) -> ObjectType {
@@ -79,7 +79,7 @@ pub mod object_system {
     }
     
     impl ObjectInterface for Integer {
-        fn inspect(&self) -> String {
+        fn log(&self) -> String {
             format!("{}", self.value)
         }
     
@@ -94,7 +94,7 @@ pub mod object_system {
     }
     
     impl ObjectInterface for Boolean {
-        fn inspect(&self) -> String {
+        fn log(&self) -> String {
             format!("{}", self.value)
         }
     
@@ -106,7 +106,7 @@ pub mod object_system {
     pub struct Null;
     
     impl ObjectInterface for Null {
-        fn inspect(&self) -> String {
+        fn log(&self) -> String {
             format!("0")
         }
     
@@ -295,6 +295,7 @@ fn eval_bang_operator_expression(right: object_system::Object) -> object_system:
 #[cfg(test)]
 mod tests {
     use crate::interpreter::*;
+    use crate::interpreter::evaluate::object_system::ObjectInterface;
     use super::*;
 
     #[test]
@@ -355,7 +356,7 @@ mod tests {
 
             // send program for evaluation
             let result = eval(program);
-            assert_eq!(result.inspect(), input.expected.to_string());
+            assert_eq!(result.log(), input.expected.to_string());
 
         }
     }
@@ -385,7 +386,7 @@ mod tests {
                 Err(_) => panic!("Error parsing program"),
             };
             let evaluated = eval(program);
-            assert_eq!(evaluated.inspect(), input.expected.to_string());
+            assert_eq!(evaluated.log(), input.expected.to_string());
         }
     }
 
@@ -414,7 +415,7 @@ mod tests {
                 Err(_) => panic!("Error parsing program"),
             };
             let evaluated = eval(program);
-            assert_eq!(evaluated.inspect(), input.expected.to_string());
+            assert_eq!(evaluated.log(), input.expected.to_string());
         }
     }
 
@@ -451,7 +452,7 @@ mod tests {
                 Err(_) => panic!("Error parsing program"),
             };
             let evaluated = eval(program);
-            assert_eq!(evaluated.inspect(), input.expected.to_string());
+            assert_eq!(evaluated.log(), input.expected.to_string());
         }
     }
 
@@ -492,7 +493,7 @@ mod tests {
                 Err(_) => panic!("Error parsing program"),
             };
             let evaluated = eval(program);
-            assert_eq!(evaluated.inspect(), input.expected.to_string());
+            assert_eq!(evaluated.log(), input.expected.to_string());
         }
     }
 }

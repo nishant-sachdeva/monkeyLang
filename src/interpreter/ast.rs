@@ -45,18 +45,19 @@ impl Program {
             statements: Vec::new(),
         }
     }
+}
 
+pub trait Interface {
+    fn log(&self) -> String;
+}
+
+impl Interface for Program {
     // method to print the AST
-    pub fn print_program(&self) -> String {
+    fn log(&self) -> String {
         let mut output = String::new();
 
         for statement in &self.statements {
-            let node_str = match statement {
-                Statement::LetStatement(s) => format!("LetStatement {:?} \n", s),
-                Statement::ReturnStatement(r) => format!("ReturnStatement {:?} \n", r),
-                Statement::ExpressionStatement(e) => format!("ExpressionStatement {:?} \n", e),
-            };
-            output.push_str(&node_str);
+            output.push_str(&statement.log());
         }
         output
     }
@@ -69,11 +70,40 @@ pub enum Statement {
     ExpressionStatement(ExpressionStatement),
 }
 
+impl Interface for Statement {
+    fn log(&self) -> String {
+        match self {
+            Statement::LetStatement(let_statement) => let_statement.log(),
+            Statement::ReturnStatement(return_statement) => return_statement.log(),
+            Statement::ExpressionStatement(expression_statement) => expression_statement.log(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetStatement {
     pub token: Token,
     pub name: Identifier,
     pub value: Expression,
+}
+
+impl Interface for LetStatement {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str(&self.token.literal);
+        output.push_str(" ");
+        output.push_str(&self.name.value);
+        output.push_str(" = ");
+
+        if let Expression::Identifier(identifier) = &self.value {
+            output.push_str(&identifier.value);
+        }
+
+        output.push_str(";");
+
+        output
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,10 +112,33 @@ pub struct ReturnStatement {
     pub return_value: Expression,
 }
 
+impl Interface for ReturnStatement {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str(&self.token.literal);
+        output.push_str(" ");
+
+        if let Expression::Identifier(identifier) = &self.return_value {
+            output.push_str(&identifier.value);
+        }
+
+        output.push_str(";");
+
+        output
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Expression,
+}
+
+impl Interface for ExpressionStatement {
+    fn log(&self) -> String {
+        self.expression.log()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -100,6 +153,21 @@ pub enum Expression {
     CallExpression(CallExpression),
 }
 
+impl Interface for Expression {
+    fn log(&self) -> String {
+        match self {
+            Expression::Identifier(identifier) => identifier.log(),
+            Expression::IntegerLiteral(integer_literal) => integer_literal.log(),
+            Expression::BooleanLiteral(boolean_literal) => boolean_literal.log(),
+            Expression::PrefixExpression(prefix_expression) => prefix_expression.log(),
+            Expression::InfixExpression(infix_expression) => infix_expression.log(),
+            Expression::IfExpression(if_expression) => if_expression.log(),
+            Expression::FunctionLiteral(function_literal) => function_literal.log(),
+            Expression::CallExpression(call_expression) => call_expression.log(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallExpression {
     pub token: Token,
@@ -107,11 +175,54 @@ pub struct CallExpression {
     pub arguments: Vec<Expression>,
 }
 
+impl Interface for CallExpression {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str(&self.function.log());
+        output.push_str("(");
+
+        for (index, argument) in self.arguments.iter().enumerate() {
+            output.push_str(&argument.log());
+
+            if index < self.arguments.len() - 1 {
+                output.push_str(", ");
+            }
+        }
+
+        output.push_str(")");
+
+        output
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionLiteral {
     pub token: Token,
     pub parameters: Vec<Identifier>,
     pub body: BlockStatement,
+}
+
+impl Interface for FunctionLiteral {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str(&self.token.literal);
+        output.push_str("(");
+
+        for (index, parameter) in self.parameters.iter().enumerate() {
+            output.push_str(&parameter.value);
+
+            if index < self.parameters.len() - 1 {
+                output.push_str(", ");
+            }
+        }
+
+        output.push_str(") ");
+        output.push_str(&self.body.log());
+
+        output
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -122,11 +233,45 @@ pub struct IfExpression {
     pub alternative: Option<BlockStatement>,
 }
 
+impl Interface for IfExpression {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str("if");
+        output.push_str(&self.condition.log());
+        output.push_str(" ");
+        output.push_str(&self.consequence.log());
+
+        if let Some(alternative) = &self.alternative {
+            output.push_str("else ");
+            output.push_str(&alternative.log());
+        }
+
+        output
+    }
+}
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockStatement {
     pub token: Token,
     pub statements: Vec<Statement>,
+}
+
+impl Interface for BlockStatement {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str("{");
+
+        for statement in &self.statements {
+            output.push_str(&statement.log());
+        }
+
+        output.push_str("}");
+
+        output
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -135,10 +280,22 @@ pub struct BooleanLiteral {
     pub value: bool,
 }
 
+impl Interface for BooleanLiteral {
+    fn log(&self) -> String {
+        self.value.to_string()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Identifier {
     pub token: Token,
     pub value: String,
+}
+
+impl Interface for Identifier {
+    fn log(&self) -> String {
+        self.value.clone()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -147,11 +304,30 @@ pub struct IntegerLiteral {
     pub value: i64,
 }
 
+impl Interface for IntegerLiteral {
+    fn log(&self) -> String {
+        self.value.to_string()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrefixExpression {
     pub token: Token,
     pub operator: String,
     pub right: Box<Expression>,
+}
+
+impl Interface for PrefixExpression {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push('(');
+        output.push_str(&self.operator);
+        output.push_str(&self.right.log());
+        output.push(')');
+
+        output
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -162,6 +338,21 @@ pub struct InfixExpression {
     pub right: Box<Expression>,
 }
 
+impl Interface for InfixExpression {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push('(');
+        output.push_str(&self.left.log());
+        output.push(' ');
+        output.push_str(&self.operator);
+        output.push(' ');
+        output.push_str(&self.right.log());
+        output.push(')');
+
+        output
+    }
+}
 
 #[derive(Debug, Clone, PartialOrd, PartialEq)]
 pub enum Precedence {

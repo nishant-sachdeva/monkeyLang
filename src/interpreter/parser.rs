@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use crate::interpreter::{ast, lexer, tokens};
 
-use super::ast::BlockStatement;
-
 #[derive(Debug, Clone)]
 
 pub struct ParserError {
@@ -357,7 +355,7 @@ impl Parser {
                 },
                 value: "".to_string(),
             })),
-            consequence: BlockStatement {
+            consequence: ast::BlockStatement {
                 token: tokens::Token {
                     token_type: tokens::TokenType::LBRACE,
                     literal: "{".to_string(),
@@ -702,7 +700,7 @@ impl Parser {
 #[cfg(test)]
 mod tests {
 
-    use crate::interpreter::*;
+    use crate::interpreter::{*, ast::Interface};
     use super::*;
 
     fn test_run(input: &str) -> ast::Program {
@@ -1176,13 +1174,9 @@ mod tests {
         ];
 
         for input in inputs {
-            let _program = test_run(&input.input);
-
-            // TODO :: complete this test case
-            // we need a funtion to print out the parsed program
-
-            // let actual = program.to_string();
-            // assert_eq!(actual, input._expected);
+            let program = test_run(&input.input);
+            let actual = program.log();
+            assert_eq!(actual, input._expected);
         }
     }
 
