@@ -11,6 +11,7 @@ pub mod object_system {
         Null,
     }
     
+    #[derive(Debug, Clone, PartialEq)]
     pub enum ObjectType {
         INTEGER,
         BOOLEAN,
@@ -51,7 +52,7 @@ pub mod object_system {
 
     impl ObjectInterface for EvalError {
         fn log(&self) -> String {
-            format!("ERROR: {}", self.message)
+            format!("{}", self.message)
         }
 
         fn object_type(&self) -> ObjectType {
@@ -117,20 +118,28 @@ pub mod object_system {
 
 }
 
+use object_system::ObjectInterface;
 
 pub fn eval(program: ast::Program) -> object_system::Object {
-    eval_statements(program.statements)
+    let mut result = object_system::Object::Null;
+    for statement in program.statements {
+        result = eval_statement(statement);
+        if let object_system::Object::ReturnValue(r) = result {
+            return *r.value;
+        } else if let object_system::Object::EvalError(_) = result {
+            return result;
+        }
+    }
+    result
 }
 
 pub fn eval_block_statement(block: ast::BlockStatement) -> object_system::Object {
-    eval_statements(block.statements)
-}
-
-fn eval_statements(statements: Vec<ast::Statement>) -> object_system::Object {
     let mut result = object_system::Object::Null;
-    for statement in statements {
+    for statement in block.statements {
         result = eval_statement(statement);
         if let object_system::Object::ReturnValue(_) = result {
+            return result;
+        } else if let object_system::Object::EvalError(_) = result {
             return result;
         }
     }
@@ -144,7 +153,8 @@ fn eval_statement(statement: ast::Statement) -> object_system::Object {
         }
         ast::Statement::ReturnStatement(return_statement) => {
             object_system::Object::ReturnValue(object_system::ReturnValue {
-                value: Box::new(eval_expression(return_statement.return_value)),
+                value: Box::new(
+                    eval_expression(return_statement.return_value)),
             })
         }
         _ => object_system::Object::Null,
@@ -196,14 +206,23 @@ fn eval_if_expression(if_expression: ast::IfExpression) -> object_system::Object
 
 fn eval_infix_expression(operator: String, left: object_system::Object, right: object_system::Object) -> object_system::Object {
 
-    if match left { object_system::Object::Integer(_) => true, _ => false } &&
-        match right { object_system::Object::Integer(_) => true, _ => false } {
+    if left.object_type() == object_system::ObjectType::INTEGER && right.object_type() == object_system::ObjectType::INTEGER {
         return eval_integer_infix_expression(operator, left, right);
-    } else if match left { object_system::Object::Boolean(_) => true, _ => false } &&
-        match right { object_system::Object::Boolean(_) => true, _ => false } {
+    } else if left.object_type() == object_system::ObjectType::BOOLEAN && right.object_type() == object_system::ObjectType::BOOLEAN {
         return eval_boolean_infix_expression(operator, left, right);
-    } else {
-        return object_system::Object::Null;
+    } else if left.object_type() != right.object_type() {
+        return object_system::Object::EvalError(
+            object_system::EvalError {
+                message: format!("type mismatch: {:?} {} {:?}", left.object_type(), operator, right.object_type()),
+            }
+        );
+    }
+    else {
+        return object_system::Object::EvalError(
+            object_system::EvalError {
+                message: format!("unknown operator: {:?} {} {:?}", left.object_type(), operator, right.object_type()),
+            }
+        );
     }
 }
 
@@ -218,7 +237,11 @@ fn eval_boolean_infix_expression(operator:String, left:object_system::Object, ri
         "!=" => object_system::Object::Boolean(object_system::Boolean {
             value: left_val.value != right_val.value,
         }),
-        _ => object_system::Object::Null,
+        _ => object_system::Object::EvalError(
+            object_system::EvalError {
+                message: format!("unknown operator: {:?} {} {:?}", left_val.object_type(), operator, right_val.object_type()),
+            }
+        )
     }
 }
 
@@ -251,7 +274,11 @@ fn eval_integer_infix_expression(operator: String, left: object_system::Object, 
         "!=" => object_system::Object::Boolean(object_system::Boolean {
             value: left_val.value != right_val.value,
         }),
-        _ => object_system::Object::Null,
+        _ => object_system::Object::EvalError(
+            object_system::EvalError {
+                message: format!("unknown operator: {:?} {} {:?}", left_val.object_type(), operator, right_val.object_type()),
+            }
+        )
     }
 }
 
@@ -259,7 +286,11 @@ fn eval_prefix_expression(operator: String, right: object_system::Object) -> obj
     match operator.as_str() {
         "!" => eval_bang_operator_expression(right),
         "-" => eval_minus_prefix_operator_expression(right),
-        _ => object_system::Object::Null,
+        _ => object_system::Object::EvalError(
+            object_system::EvalError {
+                message: format!("unknown operator: {}{:?}", operator, right.object_type()),
+            }
+        )
     }
 }
 
@@ -270,7 +301,11 @@ fn eval_minus_prefix_operator_expression(right: object_system::Object) -> object
                 value: -integer.value,
             })
         }
-        _ => object_system::Object::Null,
+        _ => object_system::Object::EvalError(
+            object_system::EvalError {
+                message: format!("unknown operator: -{:?}", right.object_type()),
+            }
+        )
     }
 }
 
@@ -326,7 +361,7 @@ mod tests {
             let result = eval(program);
             match result {
                 object_system::Object::EvalError(error) => assert_eq!(error.message, input.expected),
-                _ => panic!("result is not error object"),
+                _ => panic!("Got {} Expected {}. Result {}", result.log(), input.expected, result.log() == input.expected),
             }
         }
     }
