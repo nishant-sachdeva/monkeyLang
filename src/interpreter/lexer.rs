@@ -193,7 +193,7 @@ impl Lexer {
     // read the next word in the input
     fn next_word(&mut self) -> String {
         let mut word = String::new();
-        while self.read_char().is_alphanumeric() {
+        while self.read_char().is_alphanumeric() || self.read_char() == '_' {
             word.push(self.read_char());
             self.advance();
         }

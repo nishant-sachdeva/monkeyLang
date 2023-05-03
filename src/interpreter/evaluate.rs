@@ -3,6 +3,7 @@ use crate::interpreter::{
 };
 
 pub mod object_system {
+    #[derive(Debug, Clone, PartialEq)]
     pub enum Object {
         Integer(Integer),
         Boolean(Boolean),
@@ -46,6 +47,7 @@ pub mod object_system {
         }
     }
 
+    #[derive(Debug, Clone, PartialEq)]
     pub struct EvalError {
         pub message: String,
     }
@@ -60,6 +62,7 @@ pub mod object_system {
         }
     }
 
+    #[derive(Debug, Clone, PartialEq)]
     pub struct ReturnValue {
         pub value: Box<Object>,
     }
@@ -74,7 +77,7 @@ pub mod object_system {
         }
     }
     
-    
+    #[derive(Debug, Clone, PartialEq)]
     pub struct Integer {
         pub value: i64,
     }
@@ -89,7 +92,7 @@ pub mod object_system {
         }
     }
     
-    
+    #[derive(Debug, Clone, PartialEq)]
     pub struct Boolean {
         pub value: bool,
     }
@@ -120,10 +123,41 @@ pub mod object_system {
 
 use object_system::ObjectInterface;
 
+
+pub mod environment {
+    pub struct Environment {
+        pub store: std::collections::HashMap<String, super::object_system::Object>,
+    }
+
+    impl Environment {
+        pub fn new() -> Environment {
+            Environment {
+                store: std::collections::HashMap::new(),
+            }
+        }
+
+        pub fn get(&self, name: &str) -> Result<&super::object_system::Object, String> {
+            match self.store.get(name) {
+                Some(v) => Ok(v),
+                None => Err(format!("{} is not set.", name)),
+            }
+        }
+
+        pub fn set(&mut self, name: &str, value: super::object_system::Object) -> Result <super::object_system::Object, String> {
+            match self.store.insert(name.to_string(), value) {
+                Some(v) => Ok(v),
+                None => Ok(super::object_system::Object::Null),
+            }
+        }
+    }
+    
+}
+
 pub fn eval(program: ast::Program) -> object_system::Object {
     let mut result = object_system::Object::Null;
+    let mut env = environment::Environment::new();
     for statement in program.statements {
-        result = eval_statement(statement);
+        result = eval_statement(statement, &mut env);
         if let object_system::Object::ReturnValue(r) = result {
             return *r.value;
         } else if let object_system::Object::EvalError(_) = result {
@@ -133,10 +167,10 @@ pub fn eval(program: ast::Program) -> object_system::Object {
     result
 }
 
-pub fn eval_block_statement(block: ast::BlockStatement) -> object_system::Object {
+pub fn eval_block_statement(block: ast::BlockStatement, env: &mut environment::Environment) -> object_system::Object {
     let mut result = object_system::Object::Null;
     for statement in block.statements {
-        result = eval_statement(statement);
+        result = eval_statement(statement, env);
         if let object_system::Object::ReturnValue(_) = result {
             return result;
         } else if let object_system::Object::EvalError(_) = result {
@@ -146,22 +180,33 @@ pub fn eval_block_statement(block: ast::BlockStatement) -> object_system::Object
     result
 }
 
-fn eval_statement(statement: ast::Statement) -> object_system::Object {
+fn eval_statement(statement: ast::Statement, env: &mut environment::Environment) -> object_system::Object {
     match statement {
         ast::Statement::ExpressionStatement(expression_statement) => {
-            eval_expression(expression_statement.expression)
+            eval_expression(expression_statement.expression, env)
         }
         ast::Statement::ReturnStatement(return_statement) => {
             object_system::Object::ReturnValue(object_system::ReturnValue {
                 value: Box::new(
-                    eval_expression(return_statement.return_value)),
+                    eval_expression(return_statement.return_value, env)),
             })
         }
-        _ => object_system::Object::Null,
+        ast::Statement::LetStatement(let_statement) => {
+            let value = eval_expression(let_statement.value.clone(), env);
+            if let object_system::Object::EvalError(_) = value {
+                return value;
+            }
+            match env.set(&let_statement.name.value, value) {
+                Ok(_) => object_system::Object::Null,
+                Err(e) => object_system::Object::EvalError(object_system::EvalError {
+                    message: e,
+                }),
+            }
+        }
     }
 }
 
-fn eval_expression(expression: ast::Expression) -> object_system::Object {
+fn eval_expression(expression: ast::Expression, env: &mut environment::Environment) -> object_system::Object {
     match expression {
         ast::Expression::IntegerLiteral(integer_literal) => {
             object_system::Object::Integer(object_system::Integer {
@@ -174,31 +219,39 @@ fn eval_expression(expression: ast::Expression) -> object_system::Object {
             })
         }
         ast::Expression::PrefixExpression(prefix_expression) => {
-            let right = eval_expression(*prefix_expression.right);
+            let right = eval_expression(*prefix_expression.right, env);
             eval_prefix_expression(prefix_expression.operator, right)
         }
         ast::Expression::InfixExpression(infix_expression) => {
-            let left = eval_expression(*infix_expression.left);
-            let right = eval_expression(*infix_expression.right);
+            let left = eval_expression(*infix_expression.left, env);
+            let right = eval_expression(*infix_expression.right, env);
             eval_infix_expression(infix_expression.operator, left, right)
         }
         ast::Expression::IfExpression(if_expression) => {
-            eval_if_expression(if_expression)
+            eval_if_expression(if_expression, env)
+        }
+        ast::Expression::Identifier(identifier) => {
+            match env.get(identifier.value.as_str()) {
+                Ok(v) => v.clone(),
+                Err(e) => object_system::Object::EvalError(object_system::EvalError {
+                    message: e,
+                }),
+            }
         }
         _ => object_system::Object::Null,
     }
 }
 
-fn eval_if_expression(if_expression: ast::IfExpression) -> object_system::Object {
-    let condition = eval_expression(*if_expression.condition);
+fn eval_if_expression(if_expression: ast::IfExpression, env: &mut environment::Environment) -> object_system::Object {
+    let condition = eval_expression(*if_expression.condition,env);
     if match condition {
         object_system::Object::Boolean(b) => b.value,
         object_system::Object::Integer(_i) => true,
         _ => false,
     } {
-        eval_block_statement(if_expression.consequence)
+        eval_block_statement(if_expression.consequence, env)
     } else if let Some(alternative) = if_expression.alternative {
-        eval_block_statement(alternative)
+        eval_block_statement(alternative, env)
     } else {
         object_system::Object::Null
     }
@@ -333,6 +386,19 @@ mod tests {
     use crate::interpreter::evaluate::object_system::ObjectInterface;
     use super::*;
 
+    fn test_run(input: &str) -> object_system::Object {
+        let lexer = lexer::Lexer::new(input.to_string());
+        let mut parser = parser::Parser::new(lexer);
+
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(e) => panic!("{}", e.message),
+        };
+
+        let result = eval(program);
+        result
+    }
+
     #[test]
     fn test_error_handling() {
         struct Test {
@@ -348,23 +414,40 @@ mod tests {
             Test {input: "5; true + false; 5".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
             Test {input: "if (10 > 1) { true + false; }".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
             Test {input: "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
+            Test {input: "foobar".to_string(), expected: "foobar is not set.".to_string()},
         ];
 
         for input in inputs {
-            let lexer = lexer::Lexer::new(input.input);
-            let mut parser = parser::Parser::new(lexer);
-            let program = match parser.parse_program() {
-                Ok(program) => program,
-                Err(err) => panic!("ParserError: {:?}", err),
-            };
-
-            let result = eval(program);
+            let result = test_run(&input.input);
             match result {
                 object_system::Object::EvalError(error) => assert_eq!(error.message, input.expected),
                 _ => panic!("Got {} Expected {}. Result {}", result.log(), input.expected, result.log() == input.expected),
             }
         }
     }
+
+    #[test]
+    fn test_let_statements() {
+        struct Test {
+            input: String,
+            expected: i64,
+        }
+
+        let input = vec![
+            Test {input: "let test_str = 5; test_str;".to_string(), expected: 5},
+            Test {input: "let a = 5 * 5; a;".to_string(), expected: 25},
+            Test {input: "let a = 5; let b = a; b;".to_string(), expected: 5},
+            Test {input: "let a = 5; let b = a; let c = a + b + 5; c;".to_string(), expected: 15},
+        ];
+
+        for test in input {
+            let result = test_run(&test.input);
+            
+            assert_eq!(result.object_type(), object_system::ObjectType::INTEGER);
+            assert_eq!(result.log(), test.expected.to_string());
+        }
+    }
+
 
     #[test]
     fn test_return_statements() {
@@ -382,15 +465,7 @@ mod tests {
         ];
 
         for input in inputs {
-            let lexer = lexer::Lexer::new(input.input);
-            let mut parser = parser::Parser::new(lexer);
-            let program = match parser.parse_program() {
-                Ok(program) => program,
-                Err(_) => panic!("Parser returned None"),
-            };
-
-            // send program for evaluation
-            let result = eval(program);
+            let result = test_run(&input.input);
             assert_eq!(result.log(), input.expected.to_string());
 
         }
@@ -414,14 +489,8 @@ mod tests {
         ];
 
         for input in inputs {
-            let lexer = lexer::Lexer::new(input.input);
-            let mut parser = parser::Parser::new(lexer);
-            let program = match parser.parse_program() {
-                Ok(program) => program,
-                Err(_) => panic!("Error parsing program"),
-            };
-            let evaluated = eval(program);
-            assert_eq!(evaluated.log(), input.expected.to_string());
+            let result = test_run(&input.input);
+            assert_eq!(result.log(), input.expected.to_string());
         }
     }
 
@@ -443,14 +512,8 @@ mod tests {
         ];
 
         for input in inputs {
-            let lexer = lexer::Lexer::new(input.input);
-            let mut parser = parser::Parser::new(lexer);
-            let program = match parser.parse_program() {
-                Ok(program) => program,
-                Err(_) => panic!("Error parsing program"),
-            };
-            let evaluated = eval(program);
-            assert_eq!(evaluated.log(), input.expected.to_string());
+            let result = test_run(&input.input);
+            assert_eq!(result.log(), input.expected.to_string());
         }
     }
 
@@ -480,14 +543,8 @@ mod tests {
         ];
 
         for input in inputs {
-            let lexer = lexer::Lexer::new(input.input);
-            let mut parser = parser::Parser::new(lexer);
-            let program = match parser.parse_program() {
-                Ok(program) => program,
-                Err(_) => panic!("Error parsing program"),
-            };
-            let evaluated = eval(program);
-            assert_eq!(evaluated.log(), input.expected.to_string());
+            let result = test_run(&input.input);
+            assert_eq!(result.log(), input.expected.to_string());
         }
     }
 
@@ -521,14 +578,8 @@ mod tests {
         ];
 
         for input in inputs {
-            let lexer = lexer::Lexer::new(input.input);
-            let mut parser = parser::Parser::new(lexer);
-            let program = match parser.parse_program() {
-                Ok(program) => program,
-                Err(_) => panic!("Error parsing program"),
-            };
-            let evaluated = eval(program);
-            assert_eq!(evaluated.log(), input.expected.to_string());
+            let result = test_run(&input.input);
+            assert_eq!(result.log(), input.expected.to_string());
         }
     }
 }
