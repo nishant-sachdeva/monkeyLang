@@ -1,12 +1,22 @@
-use crate::interpreter::ast;
+use std::ops::Deref;
+
+pub use crate::interpreter::{
+    ast,
+    tokens
+};
 
 pub mod object_system {
+    use crate::interpreter::ast::Interface;
+
+    use super::*;
+
     #[derive(Debug, Clone, PartialEq)]
     pub enum Object {
         Integer(Integer),
         Boolean(Boolean),
         ReturnValue(ReturnValue),
         EvalError(EvalError),
+        FunctionObject(FunctionObject),
         Null,
     }
     
@@ -16,6 +26,7 @@ pub mod object_system {
         BOOLEAN,
         EvalError,
         NULL,
+        FunctionObject
     }
     
     pub trait ObjectInterface {
@@ -30,6 +41,7 @@ pub mod object_system {
                 Object::Boolean(b) => b.log(),
                 Object::ReturnValue(rv) => rv.log(),
                 Object::EvalError(eo) => eo.log(),
+                Object::FunctionObject(fo) => fo.log(),
                 Object::Null => "0".to_string(),            
             }
         }
@@ -40,8 +52,29 @@ pub mod object_system {
                 Object::Boolean(b) => b.object_type(),
                 Object::ReturnValue(rv) => rv.object_type(),
                 Object::EvalError(eo) => eo.object_type(),
+                Object::FunctionObject(fo) => fo.object_type(),
                 Object::Null => ObjectType::NULL,            
             }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct FunctionObject {
+        pub token: tokens::Token,
+        pub parameters: Vec<ast::Identifier>,
+        pub body: ast::BlockStatement,
+        pub env: std::rc::Rc<std::cell::RefCell<super::environment::Environment>>,
+    }
+
+    impl ObjectInterface for FunctionObject {
+        fn log(&self) -> String {
+            format!("fn({}) {{\n{}\n}}",
+                self.parameters.iter().map(|p| p.log()).collect::<Vec<String>>().join(", "),
+                self.body.statements.iter().map(|s| s.log()).collect::<Vec<String>>().join("\n"))
+        }
+
+        fn object_type(&self) -> ObjectType {
+            ObjectType::FunctionObject
         }
     }
 
@@ -123,21 +156,30 @@ use object_system::ObjectInterface;
 
 
 pub mod environment {
+    #[derive(Debug, Clone, PartialEq)]
     pub struct Environment {
         pub store: std::collections::HashMap<String, super::object_system::Object>,
+        pub outer: Box<Option<Environment>>,
     }
 
     impl Environment {
-        pub fn new() -> Environment {
+        pub fn new(outer: Box<Option<Environment>>) -> Environment {
             Environment {
                 store: std::collections::HashMap::new(),
+                outer: match *outer {
+                    Some(ref o) => Box::new(Some(o.clone())),
+                    None => Box::new(None),
+                }
             }
         }
 
         pub fn get(&self, name: &str) -> Result<&super::object_system::Object, String> {
             match self.store.get(name) {
                 Some(v) => Ok(v),
-                None => Err(format!("{} is not set.", name)),
+                None => match *self.outer {
+                    Some(ref o) => o.get(name),
+                    None => Err(format!("Identifier not found: {}", name)),
+                }
             }
         }
 
@@ -235,8 +277,85 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
                 }),
             }
         }
-        _ => object_system::Object::Null,
+        ast::Expression::FunctionLiteral(function_literal) => {
+            object_system::Object::FunctionObject(object_system::FunctionObject {
+                token: function_literal.token,
+                parameters: function_literal.parameters,
+                body: function_literal.body,
+                env: std::rc::Rc::new(std::cell::RefCell::new(env.clone())),
+            })
+        }
+        ast::Expression::CallExpression(call_expression) => {
+            let function = eval_expression(*call_expression.function, env);
+            if let object_system::Object::EvalError(_) = function {
+                return function;
+            }
+            let arguments = eval_expressions(call_expression.arguments, env);
+            if arguments.len() == 1 && {
+                if let object_system::Object::EvalError(_) = arguments[0] {
+                    true
+                } else {
+                    false
+                }
+            } {
+                return arguments[0].clone();
+            }
+
+            return apply_function(function, arguments);
+
+        }
     }
+}
+
+fn apply_function(function: object_system::Object, arguments: Vec<object_system::Object>) -> object_system::Object {
+    let object_system::Object::FunctionObject(function_object) = function else {
+        return object_system::Object::EvalError(object_system::EvalError {
+            message: format!("Not a function: {:?}", function),
+        });
+    };
+    let mut extended_env = match extend_function_env(&function_object, arguments) {
+        Ok(env) => env,
+        Err(e) => return e,
+    };
+    let evaluated = eval_block_statement(function_object.body, &mut extended_env);
+    if let object_system::Object::ReturnValue(r) = evaluated {
+        return *r.value;
+    } else {
+        return evaluated;
+    }
+}
+
+
+fn extend_function_env(function: &object_system::FunctionObject, arguments: Vec<object_system::Object>)
+    -> Result<environment::Environment, object_system::Object> {
+    let mut env = environment::Environment::new(
+        Box::new(Some(function.env.borrow().deref().clone())),
+    );
+    for (i, parameter) in function.parameters.iter().enumerate() {
+        match env.set(&parameter.value, arguments[i].clone()) {
+            Ok(_) => {}
+            Err(e) => {
+                return Err(
+                    object_system::Object::EvalError(object_system::EvalError {
+                        message: e,
+                    }
+                ));
+            }
+        }
+    }
+    Ok(env)
+}
+
+fn eval_expressions(arguments: Vec<ast::Expression>, env: &mut environment::Environment) -> Vec<object_system::Object> {
+    let mut result = Vec::new();
+    for argument in arguments {
+        let evaluated = eval_expression(argument, env);
+        if let object_system::Object::EvalError(_) = evaluated {
+            return vec![evaluated];
+        }
+        result.push(evaluated);
+    }
+    result
 }
 
 fn eval_if_expression(if_expression: ast::IfExpression, env: &mut environment::Environment) -> object_system::Object {
@@ -380,8 +499,10 @@ fn eval_bang_operator_expression(right: object_system::Object) -> object_system:
 #[cfg(test)]
 mod tests {
     use crate::interpreter::*;
-    use crate::interpreter::evaluate::object_system::ObjectInterface;
-    use super::*;
+    use crate::interpreter::{
+        evaluate::*,
+        ast::*
+    };
 
     fn test_run(input: &str) -> object_system::Object {
         let lexer = lexer::Lexer::new(input.to_string());
@@ -392,10 +513,73 @@ mod tests {
             Err(e) => panic!("{}", e.message),
         };
 
-        let mut env = environment::Environment::new();
+        let mut env = environment::Environment::new(Box::new(None));
 
         let result = eval(program, &mut env);
         result
+    }
+
+    #[test]
+    fn test_closures() {
+        let input = "
+        let newAdder = fn(x) {
+            fn(y) { x + y };
+        };
+        
+        let addTwo = newAdder(2);
+        addTwo(2);
+        ";
+
+        let result = test_run(input);
+        let object_system::Object::Integer(integer) = result
+        else {
+            panic!("expected integer")
+        };
+        assert_eq!(integer.value, 4);
+    }
+
+    #[test]
+    fn test_function_evaluation() {
+        pub struct Test {
+            input: String,
+            expected: i64,
+        }
+
+        let inputs = vec![
+            Test {input: "fn(x) { x + 2; }(2);".to_string(), expected: 4},
+            Test {input: "let identity = fn(x) { x; }; identity(5);".to_string(), expected: 5},
+            Test {input: "let double = fn(x) { x * 2; }; double(5);".to_string(), expected: 10},
+            Test {input: "let add = fn(x, y) { x + y; }; add(5, 5);".to_string(), expected: 10},
+            Test {input: "let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));".to_string(), expected: 20},
+        ];
+
+        for input in inputs {
+            let result = test_run(&input.input);
+            let integer = match result {
+                object_system::Object::Integer(integer) => integer,
+                _ => panic!("expected integer"),
+            };
+
+            assert_eq!(integer.value, input.expected);
+        }
+    }
+
+    #[test]
+    fn test_function_object() {
+        let input = "fn(x) { x + 2; }";
+        let result = test_run(input);
+
+        assert_eq!(result.object_type(), object_system::ObjectType::FunctionObject);
+        assert_eq!(result.log(), "fn(x) {\n(x + 2)\n}");
+
+        let function = match result {
+            object_system::Object::FunctionObject(function) => function,
+            _ => panic!("expected function object"),
+        };
+
+        assert_eq!(function.parameters.len(), 1);
+        assert_eq!(function.parameters[0].log(), "x");
+        assert_eq!(function.body.log(), "{(x + 2)}");
     }
 
     #[test]
@@ -413,7 +597,7 @@ mod tests {
             Test {input: "5; true + false; 5".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
             Test {input: "if (10 > 1) { true + false; }".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
             Test {input: "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
-            Test {input: "foobar".to_string(), expected: "foobar is not set.".to_string()},
+            Test {input: "foobar".to_string(), expected: "Identifier not found: foobar".to_string()},
         ];
 
         for input in inputs {
