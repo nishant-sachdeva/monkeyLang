@@ -1,6 +1,4 @@
-use crate::interpreter::{
-    ast
-};
+use crate::interpreter::ast;
 
 pub mod object_system {
     #[derive(Debug, Clone, PartialEq)]
@@ -153,11 +151,10 @@ pub mod environment {
     
 }
 
-pub fn eval(program: ast::Program) -> object_system::Object {
+pub fn eval(program: ast::Program, env: &mut environment::Environment) -> object_system::Object {
     let mut result = object_system::Object::Null;
-    let mut env = environment::Environment::new();
     for statement in program.statements {
-        result = eval_statement(statement, &mut env);
+        result = eval_statement(statement, env);
         if let object_system::Object::ReturnValue(r) = result {
             return *r.value;
         } else if let object_system::Object::EvalError(_) = result {
@@ -395,7 +392,9 @@ mod tests {
             Err(e) => panic!("{}", e.message),
         };
 
-        let result = eval(program);
+        let mut env = environment::Environment::new();
+
+        let result = eval(program, &mut env);
         result
     }
 
