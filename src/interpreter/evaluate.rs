@@ -196,7 +196,7 @@ use object_system::ObjectInterface;
 
 pub mod built_in_functions {
     /// defining the builtin functions
-    use super::object_system::*;
+    use super::object_system::{*, self};
 
     /// returns the builtin function if it exists
     /// 
@@ -220,8 +220,18 @@ pub mod built_in_functions {
     pub fn get_builtin_function(name: &str) -> Option<Object> {
         match name {
             "len" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: len })),
+            "type" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: r#type })),
             _ => None,
         }
+    }
+
+    pub fn r#type(object: Vec<object_system::Object>) -> object_system::Object {
+        if object.len() != 1 {
+            return Object::EvalError(EvalError { message: format!("wrong number of arguments. got={}, want=1", object.len()) });
+        }
+        let object = object[0].clone();
+        Object::StringObject(StringObject { value: format!("{:?}", object.object_type()) })
+
     }
 
     pub fn len(args: Vec<Object>) -> Object {
@@ -741,6 +751,27 @@ mod tests {
                     }
                 ),
             },
+            Test {
+                input: "type(1)".to_string(),
+                expected: object_system::Object::StringObject(object_system::StringObject {
+                    value: "INTEGER".to_string(),
+                }),
+            },
+            Test {
+                input: "type(\"hello\")".to_string(),
+                expected: object_system::Object::StringObject(object_system::StringObject {
+                    value: "StringObject".to_string(),
+                }),
+            },
+            Test {
+                input: "type(\"one\", \"two\")".to_string(),
+                expected: object_system::Object::EvalError(
+                    object_system::EvalError {
+                        message: "wrong number of arguments. got=2, want=1".to_string(),
+                    }
+                ),
+            },
+
         ];
 
         for input in inputs {
