@@ -16,8 +16,9 @@ pub mod object_system {
         Boolean(Boolean),
         StringObject(StringObject),
         ReturnValue(ReturnValue),
-        EvalError(EvalError),
         FunctionObject(FunctionObject),
+        BuiltinFunctionObject(BuiltinFunctionObject),
+        EvalError(EvalError),
         Null,
     }
     
@@ -25,10 +26,11 @@ pub mod object_system {
     pub enum ObjectType {
         INTEGER,
         BOOLEAN,
-        EvalError,
         StringObject,
+        FunctionObject,
+        BuiltinFunctionObject,
+        EvalError,
         NULL,
-        FunctionObject
     }
     
     pub trait ObjectInterface {
@@ -45,6 +47,7 @@ pub mod object_system {
                 Object::EvalError(eo) => eo.log(),
                 Object::FunctionObject(fo) => fo.log(),
                 Object::StringObject(so) => so.log(),
+                Object::BuiltinFunctionObject(bfo) => bfo.log(),
                 Object::Null => "0".to_string(),            
             }
         }
@@ -56,9 +59,25 @@ pub mod object_system {
                 Object::ReturnValue(rv) => rv.object_type(),
                 Object::EvalError(eo) => eo.object_type(),
                 Object::FunctionObject(fo) => fo.object_type(),
+                Object::BuiltinFunctionObject(bfo) => bfo.object_type(),
                 Object::StringObject(so) => so.object_type(),
                 Object::Null => ObjectType::NULL,            
             }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct BuiltinFunctionObject {
+        pub func: fn(Vec<Object>) -> Object,
+    }
+
+    impl ObjectInterface for BuiltinFunctionObject {
+        fn log(&self) -> String {
+            format!("builtin function")
+        }
+
+        fn object_type(&self) -> ObjectType {
+            ObjectType::BuiltinFunctionObject
         }
     }
 
@@ -173,6 +192,49 @@ pub mod object_system {
 }
 
 use object_system::ObjectInterface;
+
+
+pub mod built_in_functions {
+    /// defining the builtin functions
+    use super::object_system::*;
+
+    /// returns the builtin function if it exists
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - the name of the builtin function
+    /// 
+    /// # Returns
+    /// 
+    /// * `Option<Object>` - the builtin function if it exists
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// use monkey_lang::interpreter::evaluate::object_system::*;
+    /// use monkey_lang::interpreter::evaluate::built_in_functions::*;
+    /// 
+    /// let builtin_function = get_builtin_function("len");
+    /// assert!(builtin_function.is_some());
+    /// ```
+    pub fn get_builtin_function(name: &str) -> Option<Object> {
+        match name {
+            "len" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: len })),
+            _ => None,
+        }
+    }
+
+    pub fn len(args: Vec<Object>) -> Object {
+        if args.len() != 1 {
+            return Object::EvalError(EvalError { message: format!("wrong number of arguments. got={}, want=1", args.len()) });
+        }
+
+        match args[0].clone() {
+            Object::StringObject(so) => Object::Integer(Integer { value: so.value.len() as i64 }),
+            _ => Object::EvalError(EvalError { message: format!("argument to `len` not supported, got {:?}", args[0].object_type()) }),
+        }
+    }
+}
 
 
 pub mod environment {
@@ -320,12 +382,7 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
             eval_if_expression(if_expression, env)
         }
         ast::Expression::Identifier(identifier) => {
-            match env.get(identifier.value.as_str()) {
-                Ok(v) => v.clone(),
-                Err(e) => object_system::Object::EvalError(object_system::EvalError {
-                    message: e,
-                }),
-            }
+            eval_identifier(identifier, env)
         }
         ast::Expression::FunctionLiteral(function_literal) => {
             object_system::Object::FunctionObject(object_system::FunctionObject {
@@ -361,24 +418,57 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
     }
 }
 
-fn apply_function(function: object_system::Object, arguments: Vec<object_system::Object>) -> object_system::Object {
-    let object_system::Object::FunctionObject(function_object) = function else {
-        return object_system::Object::EvalError(object_system::EvalError {
-            message: format!("Not a function: {:?}", function),
-        });
-    };
-    let mut extended_env = match extend_function_env(&function_object, arguments) {
-        Ok(env) => env,
-        Err(e) => return e,
-    };
-    let evaluated = eval_block_statement(function_object.body, &mut extended_env);
-    if let object_system::Object::ReturnValue(r) = evaluated {
-        return *r.value;
-    } else {
-        return evaluated;
+fn eval_identifier(identifier: ast::Identifier, env: &mut environment::Environment) -> object_system::Object {
+    match env.get(identifier.value.as_str()) {
+        Ok(v) => v.clone(),
+        Err(e) => {
+            // check if this is a builtin Function
+            match built_in_functions::get_builtin_function(identifier.value.as_str()) {
+                Some(f) => f,
+                None => object_system::Object::EvalError(object_system::EvalError {
+                    message: e,
+                }),
+            }
+        }
     }
 }
 
+fn apply_function(function: object_system::Object, arguments: Vec<object_system::Object>) -> object_system::Object {
+    match function {
+        object_system::Object::FunctionObject(function_object) => {
+            apply_function_object(function_object, arguments)
+        }
+        object_system::Object::BuiltinFunctionObject(built_in_function) => {
+            apply_builtin_function(built_in_function, arguments)
+        }
+        _ => object_system::Object::EvalError(object_system::EvalError {
+            message: format!("not a function: {:?}", function),
+        }),
+    }
+}
+
+fn apply_function_object(function_object: object_system::FunctionObject, arguments: Vec<object_system::Object>) -> object_system::Object {
+    let extended_env = extend_function_env(&function_object, arguments);
+    if let Err(e) = extended_env {
+        return e;
+    }
+    let mut env = extended_env.unwrap();
+    let evaluated = eval_block_statement(function_object.body, &mut env);
+    unwrap_return_value(evaluated)
+}
+
+fn unwrap_return_value(evaluated: object_system::Object) -> object_system::Object {
+    match evaluated {
+        object_system::Object::ReturnValue(return_value) => {
+            *return_value.value
+        }
+        _ => evaluated,
+    }
+}
+
+fn apply_builtin_function(built_in_function: object_system::BuiltinFunctionObject, arguments: Vec<object_system::Object>) -> object_system::Object {
+    (built_in_function.func)(arguments)
+}
 
 fn extend_function_env(function: &object_system::FunctionObject, arguments: Vec<object_system::Object>)
     -> Result<environment::Environment, object_system::Object> {
@@ -607,6 +697,56 @@ mod tests {
 
         let result = eval(program, &mut env);
         result
+    }
+
+    #[test]
+    fn test_builtin_functions() {
+        struct Test {
+            input: String,
+            expected: object_system::Object,
+        }
+
+        let inputs = vec![
+            Test {
+                input: "len(\"\")".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer {
+                    value: 0,
+                }),
+            },
+            Test {
+                input: "len(\"four\")".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer {
+                    value: 4,
+                }),
+            },
+            Test {
+                input: "len(\"hello world\")".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer {
+                    value: 11,
+                }),
+            },
+            Test {
+                input: "len(1)".to_string(),
+                expected: object_system::Object::EvalError(
+                    object_system::EvalError {
+                        message: "argument to `len` not supported, got INTEGER".to_string(),
+                    }
+                ),
+            },
+            Test {
+                input: "len(\"one\", \"two\")".to_string(),
+                expected: object_system::Object::EvalError(
+                    object_system::EvalError {
+                        message: "wrong number of arguments. got=2, want=1".to_string(),
+                    }
+                ),
+            },
+        ];
+
+        for input in inputs {
+            let result = test_run(&input.input);
+            assert_eq!(result, input.expected);
+        }
     }
 
     #[test]
