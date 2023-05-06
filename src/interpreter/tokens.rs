@@ -2,7 +2,7 @@
 #[derive(PartialEq, PartialOrd, Debug, Clone, Copy, Eq, Hash)]
 pub enum TokenType {
     ILLEGAL, EOF,
-    IDENT, INT,
+    IDENT, INT, STRING,
     ASSIGN, PLUS, MINUS, BANG, ASTERISK, SLASH, LT, GT, EQ, NotEq,
     COMMA, SEMICOLON,
     LPAREN, RPAREN, LBRACE, RBRACE,

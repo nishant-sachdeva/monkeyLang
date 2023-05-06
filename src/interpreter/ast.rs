@@ -151,6 +151,7 @@ pub enum Expression {
     IfExpression(IfExpression),
     FunctionLiteral(FunctionLiteral),
     CallExpression(CallExpression),
+    StringLiteral(StringLiteral),
 }
 
 impl Interface for Expression {
@@ -164,7 +165,20 @@ impl Interface for Expression {
             Expression::IfExpression(if_expression) => if_expression.log(),
             Expression::FunctionLiteral(function_literal) => function_literal.log(),
             Expression::CallExpression(call_expression) => call_expression.log(),
+            Expression::StringLiteral(string_literal) => string_literal.log(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringLiteral {
+    pub token: Token,
+    pub value: String,
+}
+
+impl Interface for StringLiteral {
+    fn log(&self) -> String {
+        self.token.literal.clone()
     }
 }
 

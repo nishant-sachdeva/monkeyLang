@@ -14,6 +14,7 @@ pub mod object_system {
     pub enum Object {
         Integer(Integer),
         Boolean(Boolean),
+        StringObject(StringObject),
         ReturnValue(ReturnValue),
         EvalError(EvalError),
         FunctionObject(FunctionObject),
@@ -25,6 +26,7 @@ pub mod object_system {
         INTEGER,
         BOOLEAN,
         EvalError,
+        StringObject,
         NULL,
         FunctionObject
     }
@@ -42,6 +44,7 @@ pub mod object_system {
                 Object::ReturnValue(rv) => rv.log(),
                 Object::EvalError(eo) => eo.log(),
                 Object::FunctionObject(fo) => fo.log(),
+                Object::StringObject(so) => so.log(),
                 Object::Null => "0".to_string(),            
             }
         }
@@ -53,8 +56,25 @@ pub mod object_system {
                 Object::ReturnValue(rv) => rv.object_type(),
                 Object::EvalError(eo) => eo.object_type(),
                 Object::FunctionObject(fo) => fo.object_type(),
+                Object::StringObject(so) => so.object_type(),
                 Object::Null => ObjectType::NULL,            
             }
+        }
+    }
+
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct StringObject {
+        pub value: String,
+    }
+
+    impl ObjectInterface for StringObject {
+        fn log(&self) -> String {
+            format!("{}", self.value)
+        }
+
+        fn object_type(&self) -> ObjectType {
+            ObjectType::StringObject
         }
     }
 
@@ -332,7 +352,11 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
             }
 
             return apply_function(function, arguments);
-
+        }
+        ast::Expression::StringLiteral(string_literal) => {
+            object_system::Object::StringObject(object_system::StringObject {
+                value: string_literal.value,
+            })
         }
     }
 }
@@ -407,6 +431,8 @@ fn eval_infix_expression(operator: String, left: object_system::Object, right: o
 
     if left.object_type() == object_system::ObjectType::INTEGER && right.object_type() == object_system::ObjectType::INTEGER {
         return eval_integer_infix_expression(operator, left, right);
+    } else if left.object_type() == object_system::ObjectType::StringObject && right.object_type() == object_system::ObjectType::StringObject {
+        return eval_string_infix_expression(operator, left, right);
     } else if left.object_type() == object_system::ObjectType::BOOLEAN && right.object_type() == object_system::ObjectType::BOOLEAN {
         return eval_boolean_infix_expression(operator, left, right);
     } else if left.object_type() != right.object_type() {
@@ -425,7 +451,41 @@ fn eval_infix_expression(operator: String, left: object_system::Object, right: o
     }
 }
 
-fn eval_boolean_infix_expression(operator:String, left:object_system::Object, right:object_system::Object) -> object_system::Object {
+fn eval_string_infix_expression(operator: String, left: object_system::Object, right: object_system::Object) -> object_system::Object {
+    let object_system::Object::StringObject(left_val) = left else { return object_system::Object::Null; };
+    let object_system::Object::StringObject(right_val) = right else { return object_system::Object::Null; };
+
+    match operator.as_str() {
+        "+" => object_system::Object::StringObject(object_system::StringObject {
+            value: left_val.value + &right_val.value,
+        }),
+        "==" => object_system::Object::Boolean(object_system::Boolean {
+            value: left_val.value == right_val.value,
+        }),
+        "!=" => object_system::Object::Boolean(
+            object_system::Boolean {
+                value: left_val.value != right_val.value,
+            }
+        ),
+        ">" => object_system::Object::Boolean(
+            object_system::Boolean {
+                value: left_val.value > right_val.value,
+            }
+        ),
+        "<" => object_system::Object::Boolean(
+            object_system::Boolean {
+                value: left_val.value < right_val.value,
+            }
+        ),
+        _ => object_system::Object::EvalError(
+            object_system::EvalError {
+                message: format!("unknown operator: {:?} {} {:?}", left_val.object_type(), operator, right_val.object_type()),
+            }
+        ),
+    }    
+}
+
+fn eval_boolean_infix_expression(operator: String, left: object_system::Object, right: object_system::Object) -> object_system::Object {
     let object_system::Object::Boolean(left_val) = left else { return object_system::Object::Null; };
     let object_system::Object::Boolean(right_val) = right else { return object_system::Object::Null; };
 
@@ -550,6 +610,31 @@ mod tests {
     }
 
     #[test]
+    fn test_string_concatenation() {
+        let input = "\"Hello\" + \" \" + \"World!\"";
+        let result = test_run(input);
+
+        let object_system::Object::StringObject(string) = result
+        else {
+            panic!("expected string")
+        };
+
+        assert_eq!(string.value, "Hello World!");
+    }
+
+    #[test]
+    fn test_string_literals() {
+        let input = "\"hello world\"";
+
+        let result = test_run(input);
+        let object_system::Object::StringObject(string) = result
+        else {
+            panic!("expected string")
+        };
+        assert_eq!(string.value, "hello world");
+    }
+
+    #[test]
     fn test_closures() {
         let input = "
         let newAdder = fn(x) {
@@ -628,6 +713,7 @@ mod tests {
             Test {input: "if (10 > 1) { true + false; }".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
             Test {input: "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
             Test {input: "foobar".to_string(), expected: "Identifier not found: foobar".to_string()},
+            Test {input: "\"Hello\" - \"World\"".to_string(), expected: "unknown operator: StringObject - StringObject".to_string()},
         ];
 
         for input in inputs {

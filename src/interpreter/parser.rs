@@ -106,6 +106,7 @@ impl Parser {
         self.register_prefix_function(tokens::TokenType::LPAREN, Parser::parse_grouped_expression);
         self.register_prefix_function(tokens::TokenType::IF, Parser::parse_if_expression);
         self.register_prefix_function(tokens::TokenType::FUNCTION, Parser::parse_function_literal);
+        self.register_prefix_function(tokens::TokenType::STRING, Parser::parse_string_literal);
     }
 
     fn register_prefix_function(&mut self, t: tokens::TokenType, f: fn(&mut Parser) -> Result<ast::Expression, ParserError>) {
@@ -192,6 +193,15 @@ impl Parser {
         }
 
         Ok(stmt)
+    }
+
+    fn parse_string_literal(&mut self) -> Result<ast::Expression, ParserError> {
+        Ok(ast::Expression::StringLiteral(
+            ast::StringLiteral {
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            }
+        ))
     }
 
     fn parse_expression(&mut self, precedence: ast::Precedence) -> Result<ast::Expression, ParserError> {
@@ -713,6 +723,26 @@ mod tests {
         };
 
         program
+    }
+
+    #[test]
+    fn test_string_literals() {
+        let input = r#""hello world";"#;
+        let program = test_run(input);
+
+        assert_eq!(program.statements.len(), 1);
+        let stmt = match program.statements[0].clone() {
+            ast::Statement::ExpressionStatement(stmt) => stmt,
+            _ => panic!("Expected ExpressionStatement"),
+        };
+
+        let literal = match stmt.expression {
+            ast::Expression::StringLiteral(literal) => literal,
+            _ => panic!("Expected StringLiteral"),
+        };
+
+        assert_eq!(literal.value, "hello world".to_string());
+
     }
 
     #[test]

@@ -161,6 +161,10 @@ impl Lexer {
                 self.advance();
                 Token::new(TokenType::RBRACE, self.ch.to_string())
             }
+            '"' => {
+                let string = self.next_string();
+                Token::new(TokenType::STRING, string)
+            }
             '\0' => {
                 self.advance();
                 Token::new(TokenType::EOF, "".to_string())
@@ -188,6 +192,32 @@ impl Lexer {
             }
         };
         return Some(token);
+    }
+
+    /// read the next string in the input
+    /// 
+    /// # Examples
+    /// ```
+    /// use monkey_lang::interpreter::lexer::Lexer;
+    /// let mut lexer = Lexer::new(String::from("\"hello\""));
+    /// assert_eq!(lexer.next_string(), "hello");
+    /// ```
+    /// 
+    /// # Panics
+    /// ```
+    /// use monkey_lang::interpreter::lexer::Lexer;
+    /// let mut lexer = Lexer::new(String::from("\"hello"));
+    /// assert_eq!(lexer.next_string(), "hello");
+    /// ```
+    pub fn next_string(&mut self) -> String {
+        let mut string = String::new();
+        self.advance();
+        while self.read_char() != '"' && self.read_char() != '\0' {
+            string.push(self.read_char());
+            self.advance();
+        }
+        self.advance();
+        return string;
     }
 
     // read the next word in the input
@@ -329,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_multi_char_token() {
-        let input = "if 6 == 6 then true else if 5 == 5 then false else true";
+        let input = "if 6 == 6 then true else if 5 == 5 then false else true; \"foobar\" \"foo bar\" ";
         let mut lexer = Lexer::new(input.to_string());
         let expected_tokens = vec![
             Token::new(TokenType::IF, "if".to_string()),
@@ -347,6 +377,9 @@ mod tests {
             Token::new(TokenType::FALSE, "false".to_string()),
             Token::new(TokenType::ELSE, "else".to_string()),
             Token::new(TokenType::TRUE, "true".to_string()),
+            Token::new(TokenType::SEMICOLON, ";".to_string()),
+            Token::new(TokenType::STRING, "foobar".to_string()),
+            Token::new(TokenType::STRING, "foo bar".to_string()),
             Token::new(TokenType::EOF, "".to_string()),
         ];
         let tokens = lexer.tokenize();
