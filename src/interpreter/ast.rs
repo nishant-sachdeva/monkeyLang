@@ -152,6 +152,8 @@ pub enum Expression {
     FunctionLiteral(FunctionLiteral),
     CallExpression(CallExpression),
     StringLiteral(StringLiteral),
+    ArrayLiteral(ArrayLiteral),
+    IndexExpression(IndexExpression),
 }
 
 impl Interface for Expression {
@@ -166,7 +168,57 @@ impl Interface for Expression {
             Expression::FunctionLiteral(function_literal) => function_literal.log(),
             Expression::CallExpression(call_expression) => call_expression.log(),
             Expression::StringLiteral(string_literal) => string_literal.log(),
+            Expression::ArrayLiteral(array_literal) => array_literal.log(),
+            Expression::IndexExpression(index_expression) => index_expression.log(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IndexExpression {
+    pub token: Token,
+    pub left: Box<Expression>,
+    pub index: Box<Expression>,
+}
+
+impl Interface for IndexExpression {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push('(');
+        output.push_str(&self.left.log());
+        output.push('[');
+        output.push_str(&self.index.log());
+        output.push(']');
+        output.push(')');
+
+        output
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrayLiteral {
+    pub token: Token,
+    pub elements: Vec<Expression>,
+}
+
+impl Interface for ArrayLiteral {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str("[");
+
+        for (index, element) in self.elements.iter().enumerate() {
+            output.push_str(&element.log());
+
+            if index < self.elements.len() - 1 {
+                output.push_str(", ");
+            }
+        }
+
+        output.push_str("]");
+
+        output
     }
 }
 
@@ -377,6 +429,7 @@ pub enum Precedence {
     PRODUCT, // *
     PREFIX, // -X or !X
     CALL, // myFunction(X)
+    INDEX // array[index]
 }
 
 // define precedence for each operator
@@ -392,6 +445,7 @@ impl Precedence {
             TokenType::SLASH => Precedence::PRODUCT,
             TokenType::ASTERISK => Precedence::PRODUCT,
             TokenType::LPAREN => Precedence::CALL,
+            TokenType::LBRACKET => Precedence::INDEX,
             _ => Precedence::LOWEST,
         }
     }

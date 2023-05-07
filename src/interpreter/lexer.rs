@@ -161,6 +161,14 @@ impl Lexer {
                 self.advance();
                 Token::new(TokenType::RBRACE, self.ch.to_string())
             }
+            '[' => {
+                self.advance();
+                Token::new(TokenType::LBRACKET, self.ch.to_string())
+            }
+            ']' => {
+                self.advance();
+                Token::new(TokenType::RBRACKET, self.ch.to_string())
+            }
             '"' => {
                 let string = self.next_string();
                 Token::new(TokenType::STRING, string)
@@ -359,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_multi_char_token() {
-        let input = "if 6 == 6 then true else if 5 == 5 then false else true; \"foobar\" \"foo bar\" ";
+        let input = "if 6 == 6 then true else if 5 == 5 then false else true; \"foobar\" \"foo bar\" [1, 2]";
         let mut lexer = Lexer::new(input.to_string());
         let expected_tokens = vec![
             Token::new(TokenType::IF, "if".to_string()),
@@ -380,6 +388,11 @@ mod tests {
             Token::new(TokenType::SEMICOLON, ";".to_string()),
             Token::new(TokenType::STRING, "foobar".to_string()),
             Token::new(TokenType::STRING, "foo bar".to_string()),
+            Token::new(TokenType::LBRACKET, "[".to_string()),
+            Token::new(TokenType::INT, "1".to_string()),
+            Token::new(TokenType::COMMA, ",".to_string()),
+            Token::new(TokenType::INT, "2".to_string()),
+            Token::new(TokenType::RBRACKET, "]".to_string()),
             Token::new(TokenType::EOF, "".to_string()),
         ];
         let tokens = lexer.tokenize();

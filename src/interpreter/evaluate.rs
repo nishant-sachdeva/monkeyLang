@@ -18,6 +18,7 @@ pub mod object_system {
         ReturnValue(ReturnValue),
         FunctionObject(FunctionObject),
         BuiltinFunctionObject(BuiltinFunctionObject),
+        ArrayObject(ArrayObject),
         EvalError(EvalError),
         Null,
     }
@@ -29,6 +30,7 @@ pub mod object_system {
         StringObject,
         FunctionObject,
         BuiltinFunctionObject,
+        ArrayObject,
         EvalError,
         NULL,
     }
@@ -48,6 +50,7 @@ pub mod object_system {
                 Object::FunctionObject(fo) => fo.log(),
                 Object::StringObject(so) => so.log(),
                 Object::BuiltinFunctionObject(bfo) => bfo.log(),
+                Object::ArrayObject(ao) => ao.log(),
                 Object::Null => "0".to_string(),            
             }
         }
@@ -60,9 +63,25 @@ pub mod object_system {
                 Object::EvalError(eo) => eo.object_type(),
                 Object::FunctionObject(fo) => fo.object_type(),
                 Object::BuiltinFunctionObject(bfo) => bfo.object_type(),
+                Object::ArrayObject(ao) => ao.object_type(),
                 Object::StringObject(so) => so.object_type(),
                 Object::Null => ObjectType::NULL,            
             }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct ArrayObject {
+        pub elements: Vec<Object>,
+    }
+
+    impl ObjectInterface for ArrayObject {
+        fn log(&self) -> String {
+            format!("[{}]", self.elements.iter().map(|e| e.log()).collect::<Vec<String>>().join(", "))
+        }
+
+        fn object_type(&self) -> ObjectType {
+            ObjectType::ArrayObject
         }
     }
 
@@ -221,6 +240,10 @@ pub mod built_in_functions {
         match name {
             "len" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: len })),
             "type" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: r#type })),
+            "first" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: first })),
+            "last" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: last })),
+            "rest" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: rest })),
+            "push" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: push })),
             _ => None,
         }
     }
@@ -241,7 +264,110 @@ pub mod built_in_functions {
 
         match args[0].clone() {
             Object::StringObject(so) => Object::Integer(Integer { value: so.value.len() as i64 }),
+            Object::ArrayObject(ao) => Object::Integer(Integer { value: ao.elements.len() as i64 }),
             _ => Object::EvalError(EvalError { message: format!("argument to `len` not supported, got {:?}", args[0].object_type()) }),
+        }
+    }
+
+    pub fn first(args: Vec<Object>) -> Object {
+        if args.len() != 1 {
+            return Object::EvalError(EvalError { message: format!("wrong number of arguments. got={}, want=1", args.len()) });
+        }
+
+        match args[0].clone() {
+            Object::ArrayObject(ao) => {
+                if ao.elements.len() > 0 {
+                    ao.elements[0].clone()
+                } else {
+                    Object::Null
+                }
+            },
+            Object::StringObject(so) => {
+                if so.value.len() > 0 {
+                    Object::StringObject(StringObject { value: so.value[0..1].to_string() })
+                } else {
+                    Object::Null
+                }
+            },
+            _ => Object::EvalError(EvalError { message: format!("argument to `first` must be ARRAY or STRING, got {:?}", args[0].object_type()) }),
+        }
+    }
+
+    pub fn last(args: Vec<Object>) -> Object {
+        if args.len() != 1 {
+            return Object::EvalError(EvalError { message: format!("wrong number of arguments. got={}, want=1", args.len()) });
+        }
+
+        match args[0].clone() {
+            Object::ArrayObject(ao) => {
+                if ao.elements.len() > 0 {
+                    ao.elements[ao.elements.len() - 1].clone()
+                } else {
+                    Object::Null
+                }
+            },
+            Object::StringObject(so) => {
+                if so.value.len() > 0 {
+                    Object::StringObject(StringObject { value: so.value[so.value.len() - 1..so.value.len()].to_string() })
+                } else {
+                    Object::Null
+                }
+            },
+            _ => Object::EvalError(EvalError { message: format!("argument to `last` must be ARRAY or STRING, got {:?}", args[0].object_type()) }),
+        }
+    }
+
+    pub fn rest(args: Vec<Object>) -> Object {
+        if args.len() != 1 {
+            return Object::EvalError(EvalError { message: format!("wrong number of arguments. got={}, want=1", args.len()) });
+        }
+
+        match args[0].clone() {
+            Object::ArrayObject(ao) => {
+                if ao.elements.len() > 0 {
+                    let mut new_elements = Vec::new();
+                    for i in 1..ao.elements.len() {
+                        new_elements.push(ao.elements[i].clone());
+                    }
+                    Object::ArrayObject(ArrayObject { elements: new_elements })
+                } else {
+                    Object::Null
+                }
+            },
+            Object::StringObject(so) => {
+                if so.value.len() > 0 {
+                    Object::StringObject(StringObject { value: so.value[1..so.value.len()].to_string() })
+                } else {
+                    Object::Null
+                }
+            },
+            _ => Object::EvalError(EvalError { message: format!("argument to `rest` must be ARRAY or STRING, got {:?}", args[0].object_type()) }),
+        }
+    }
+
+    pub fn push(args: Vec<Object>) -> Object {
+        if args.len() != 2 {
+            return Object::EvalError(EvalError { message: format!("wrong number of arguments. got={}, want=2", args.len()) });
+        }
+
+        match args[0].clone() {
+            Object::ArrayObject(ao) => {
+                let mut a1 = ao.clone();
+                a1.elements.push(args[1].clone());
+                Object::ArrayObject(a1)
+            },
+            Object::StringObject(so) => {
+                let mut s1 = so.clone();
+                let Object::StringObject(s2) = args[1].clone()
+                else {
+                    return Object::EvalError(EvalError { message: format!("argument to STRING `push` must be STRING, got {:?}", args[1].object_type()) });
+                };
+                s1.value.push_str(
+                    &s2.value
+                );
+                Object::StringObject(s1)
+            },
+            _ => Object::EvalError(EvalError { message: format!("argument to `push` must be ARRAY or STRING, got {:?}", args[0].object_type()) }),
         }
     }
 }
@@ -425,6 +551,54 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
                 value: string_literal.value,
             })
         }
+        ast::Expression::ArrayLiteral(array_literal) => {
+            let elements = eval_expressions(array_literal.elements, env);
+            if elements.len() == 1 && {
+                if let object_system::Object::EvalError(_) = elements[0] {
+                    true
+                } else {
+                    false
+                }
+            } {
+                return elements[0].clone();
+            }
+            object_system::Object::ArrayObject(object_system::ArrayObject {
+                elements: elements,
+            })
+        }
+        ast::Expression::IndexExpression(index_expression) => {
+            let left = eval_expression(*index_expression.left, env);
+            if let object_system::Object::EvalError(_) = left {
+                return left;
+            }
+            let index = eval_expression(*index_expression.index, env);
+            if let object_system::Object::EvalError(_) = index {
+                return index;
+            }
+            eval_index_expression(left, index)
+        }
+    }
+}
+
+fn eval_index_expression(left: object_system::Object, index: object_system::Object) -> object_system::Object {
+    match (left.clone(), index.clone()) {
+        (object_system::Object::ArrayObject(array_object), object_system::Object::Integer(integer)) => {
+            if integer.value < 0 || integer.value >= array_object.elements.len() as i64 {
+                return object_system::Object::Null;
+            }
+            array_object.elements[integer.value as usize].clone()
+        }
+        (object_system::Object::StringObject(string_object), object_system::Object::Integer(integer)) => {
+            if integer.value < 0 || integer.value >= string_object.value.len() as i64 {
+                return object_system::Object::Null;
+            }
+            object_system::Object::StringObject(object_system::StringObject {
+                value: string_object.value.chars().nth(integer.value as usize).unwrap().to_string(),
+            })
+        }
+        _ => object_system::Object::EvalError(object_system::EvalError {
+            message: format!("index operator not supported: {:?}[{:?}]", left.object_type(), index.object_type()),
+        }),
     }
 }
 
@@ -710,6 +884,78 @@ mod tests {
     }
 
     #[test]
+    fn test_array_indexing() {
+        struct Test {
+            input: String,
+            expected: object_system::Object,
+        }
+
+        let inputs = vec![
+            Test {
+                input: "[1, 2, 3][0]".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 1 }),
+            },
+            Test {
+                input: "[1, 2, 3][1]".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 2 }),
+            },
+            Test {
+                input: "[1, 2, 3][2]".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 3 }),
+            },
+            Test {
+                input: "let i = 0; [1][i];".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 1 }),
+            },
+            Test {
+                input: "[1, 2, 3][1 + 1];".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 3 }),
+            },
+            Test {
+                input: "let myArray = [1, 2, 3]; myArray[2];".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 3 }),
+            },
+            Test {
+                input: "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 6 }),
+            },
+            Test {
+                input: "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 2 }),
+            },
+            Test {
+                input: "[1, 2, 3][3]".to_string(),
+                expected: object_system::Object::Null,
+            },
+            Test {
+                input: "[1, 2, 3][-1]".to_string(),
+                expected: object_system::Object::Null,
+            },
+        ];
+
+        for input in inputs {
+            let result = test_run(&input.input);
+            assert_eq!(result, input.expected);
+        }
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let input = "[1, 2 * 2, 3 + 3]";
+        let result = test_run(input);
+
+        let object_system::Object::ArrayObject(array) = result 
+        else {
+            panic!("object is not ArrayObject. got={:?}", result);
+        };
+
+        assert_eq!(array.elements.len(), 3);
+        assert_eq!(array.elements[0], object_system::Object::Integer(object_system::Integer { value: 1 }));
+        assert_eq!(array.elements[1], object_system::Object::Integer(object_system::Integer { value: 4 }));
+        assert_eq!(array.elements[2], object_system::Object::Integer(object_system::Integer { value: 6 }));
+    }
+
+    #[test]
     fn test_builtin_functions() {
         struct Test {
             input: String,
@@ -771,7 +1017,99 @@ mod tests {
                     }
                 ),
             },
-
+            Test {
+                input: "type(1, 2)".to_string(),
+                expected: object_system::Object::EvalError(
+                    object_system::EvalError {
+                        message: "wrong number of arguments. got=2, want=1".to_string(),
+                    }
+                ),
+            },
+            Test {
+                input: "len([1, 2, 3])".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer {
+                    value: 3,
+                }),
+            },
+            Test {
+                input: "len([])".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer {
+                    value: 0,
+                }),
+            },
+            Test {
+                input: "first([1, 2, 3])".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer {
+                    value: 1,
+                }),
+            },
+            Test {
+                input: "first([])".to_string(),
+                expected: object_system::Object::Null,
+            },
+            Test {
+                input: "first(1)".to_string(),
+                expected: object_system::Object::EvalError(
+                    object_system::EvalError {
+                        message: "argument to `first` must be ARRAY or STRING, got INTEGER".to_string(),
+                    }
+                ),
+            },
+            Test {
+                input: "last([1, 2, 3])".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer {
+                    value: 3,
+                }),
+            },
+            Test {
+                input: "last([])".to_string(),
+                expected: object_system::Object::Null,
+            },
+            Test {
+                input: "last(1)".to_string(),
+                expected: object_system::Object::EvalError(
+                    object_system::EvalError {
+                        message: "argument to `last` must be ARRAY or STRING, got INTEGER".to_string(),
+                    }
+                ),
+            },
+            Test {
+                input: "rest([1, 2, 3])".to_string(),
+                expected: object_system::Object::ArrayObject(object_system::ArrayObject {
+                    elements: vec![
+                        object_system::Object::Integer(object_system::Integer { value: 2 }),
+                        object_system::Object::Integer(object_system::Integer { value: 3 }),
+                    ],
+                }),
+            },
+            Test {
+                input: "rest([])".to_string(),
+                expected: object_system::Object::Null,
+            },
+            Test {
+                input: "push([], 1)".to_string(),
+                expected: object_system::Object::ArrayObject(object_system::ArrayObject {
+                    elements: vec![
+                        object_system::Object::Integer(object_system::Integer { value: 1 }),
+                    ],
+                }),
+            },
+            Test {
+                input: "push(1, 1)".to_string(),
+                expected: object_system::Object::EvalError(
+                    object_system::EvalError {
+                        message: "argument to `push` must be ARRAY or STRING, got INTEGER".to_string(),
+                    }
+                ),
+            },
+            Test {
+                input: "push([], 1, 2)".to_string(),
+                expected: object_system::Object::EvalError(
+                    object_system::EvalError {
+                        message: "wrong number of arguments. got=3, want=2".to_string(),
+                    }
+                ),
+            }
         ];
 
         for input in inputs {
