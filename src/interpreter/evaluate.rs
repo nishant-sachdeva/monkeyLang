@@ -300,8 +300,16 @@ pub mod built_in_functions {
             "last" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: last })),
             "rest" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: rest })),
             "push" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: push })),
+            "puts" => Some(Object::BuiltinFunctionObject(BuiltinFunctionObject { func: puts })),
             _ => None,
         }
+    }
+
+    pub fn puts(object: Vec<object_system::Object>) -> object_system::Object {
+        for o in object {
+            println!("{}", o.log());
+        }
+        object_system::Object::Null
     }
 
     pub fn r#type(object: Vec<object_system::Object>) -> object_system::Object {
