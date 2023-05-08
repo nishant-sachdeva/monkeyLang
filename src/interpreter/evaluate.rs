@@ -1,5 +1,7 @@
 use std::ops::Deref;
 
+use std::hash::{Hash, Hasher};
+
 pub use crate::interpreter::{
     ast,
     tokens
@@ -19,6 +21,7 @@ pub mod object_system {
         FunctionObject(FunctionObject),
         BuiltinFunctionObject(BuiltinFunctionObject),
         ArrayObject(ArrayObject),
+        HashObject(HashObject),
         EvalError(EvalError),
         Null,
     }
@@ -31,6 +34,7 @@ pub mod object_system {
         FunctionObject,
         BuiltinFunctionObject,
         ArrayObject,
+        HashObject,
         EvalError,
         NULL,
     }
@@ -51,6 +55,7 @@ pub mod object_system {
                 Object::StringObject(so) => so.log(),
                 Object::BuiltinFunctionObject(bfo) => bfo.log(),
                 Object::ArrayObject(ao) => ao.log(),
+                Object::HashObject(ho) => ho.log(),
                 Object::Null => "0".to_string(),            
             }
         }
@@ -65,8 +70,59 @@ pub mod object_system {
                 Object::BuiltinFunctionObject(bfo) => bfo.object_type(),
                 Object::ArrayObject(ao) => ao.object_type(),
                 Object::StringObject(so) => so.object_type(),
+                Object::HashObject(ho) => ho.object_type(),
                 Object::Null => ObjectType::NULL,            
             }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum HashableObject {
+        Integer(Integer),
+        Boolean(Boolean),
+        StringObject(StringObject),
+    }
+
+    impl ObjectInterface for HashableObject {
+        fn log(&self) -> String {
+            match self {
+                HashableObject::Integer(i) => i.log(),
+                HashableObject::Boolean(b) => b.log(),
+                HashableObject::StringObject(so) => so.log(),
+            }
+        }
+
+        fn object_type(&self) -> ObjectType {
+            match self {
+                HashableObject::Integer(i) => i.object_type(),
+                HashableObject::Boolean(b) => b.object_type(),
+                HashableObject::StringObject(so) => so.object_type(),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct HashObject {
+        pub pairs: std::collections::HashMap<HashableObject, Object>,
+    }
+
+    impl Hash for HashObject {
+        fn hash<H: Hasher>(&self, _state: &mut H) {
+            self.pairs.hasher();
+        }
+    }
+
+    impl ObjectInterface for HashObject {
+        fn log(&self) -> String {
+            format!("{{{}}}", self.pairs.iter().
+                                map(|(k, v)| format!("{:?}: {:?}", k.log(), v.log()))
+                                .collect::<Vec<String>>()
+                                .join(", ")
+            )
+        }
+
+        fn object_type(&self) -> ObjectType {
+            ObjectType::HashObject
         }
     }
 
@@ -101,7 +157,7 @@ pub mod object_system {
     }
 
 
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub struct StringObject {
         pub value: String,
     }
@@ -166,7 +222,7 @@ pub mod object_system {
         }
     }
     
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub struct Integer {
         pub value: i64,
     }
@@ -181,7 +237,7 @@ pub mod object_system {
         }
     }
     
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub struct Boolean {
         pub value: bool,
     }
@@ -374,10 +430,11 @@ pub mod built_in_functions {
 
 
 pub mod environment {
+    use std::collections::HashMap;
     
     #[derive(Debug, Clone, PartialEq)]
     pub struct Environment {
-        pub store: std::collections::HashMap<String, super::object_system::Object>,
+        pub store: HashMap<String, super::object_system::Object>,
         pub outer: Box<Option<Environment>>,
     }
 
@@ -577,7 +634,68 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
             }
             eval_index_expression(left, index)
         }
+        ast::Expression::HashLiteral(hash_literal) => {
+            eval_hash_literal(hash_literal, env)
+        }
     }
+}
+
+fn eval_hash_literal(hash_literal: ast::HashLiteral, env: &mut environment::Environment) -> object_system::Object {
+    let mut pairs = std::collections::HashMap::new();
+    for (key_expression, value_expression) in hash_literal.pairs {
+        let key = eval_expression(key_expression, env);
+        if let object_system::Object::EvalError(_) = key {
+            return key;
+        }
+        let value = eval_expression(value_expression, env);
+        if let object_system::Object::EvalError(_) = value {
+            return value;
+        }
+        let hash_key = match key.object_type() {
+            object_system::ObjectType::INTEGER => {
+                object_system::HashableObject::Integer(object_system::Integer {
+                    value: {
+                        if let object_system::Object::Integer(integer) = key {
+                            integer.value
+                        } else {
+                            unreachable!()
+                        }
+                    },
+                })
+            }
+            object_system::ObjectType::BOOLEAN => {
+                object_system::HashableObject::Boolean(object_system::Boolean {
+                    value: {
+                        if let object_system::Object::Boolean(boolean) = key {
+                            boolean.value
+                        } else {
+                            unreachable!()
+                        }
+                    },
+                })
+            }
+            object_system::ObjectType::StringObject => {
+                object_system::HashableObject::StringObject(object_system::StringObject {
+                    value: {
+                        if let object_system::Object::StringObject(string_object) = key {
+                            string_object.value
+                        } else {
+                            unreachable!()
+                        }
+                    },
+                })
+            }
+            _ => {
+                return object_system::Object::EvalError(object_system::EvalError {
+                    message: format!("unusable as hash key: {:?}", key.object_type()),
+                });
+            }
+        };
+        pairs.insert(hash_key, value);
+    }
+    object_system::Object::HashObject(object_system::HashObject {
+        pairs: pairs,
+    })
 }
 
 fn eval_index_expression(left: object_system::Object, index: object_system::Object) -> object_system::Object {
@@ -595,6 +713,37 @@ fn eval_index_expression(left: object_system::Object, index: object_system::Obje
             object_system::Object::StringObject(object_system::StringObject {
                 value: string_object.value.chars().nth(integer.value as usize).unwrap().to_string(),
             })
+        }
+        (object_system::Object::HashObject(hash_object), key) => {
+            // create Hashable Object out of key
+            let object_key = match key {
+                object_system::Object::Integer(integer) => {
+                    object_system::HashableObject::Integer(object_system::Integer {
+                        value: integer.value,
+                    })
+                }
+                object_system::Object::Boolean(boolean) => {
+                    object_system::HashableObject::Boolean(object_system::Boolean {
+                        value: boolean.value,
+                    })
+                }
+                object_system::Object::StringObject(string_object) => {
+                    object_system::HashableObject::StringObject(object_system::StringObject {
+                        value: string_object.value,
+                    })
+                }
+                _ => {
+                    return object_system::Object::EvalError(object_system::EvalError {
+                        message: format!("unusable as hash key: {:?}", key.object_type()),
+                    });
+                }
+            };
+
+            if let Some(value) = hash_object.pairs.get(&object_key) {
+                value.clone()
+            } else {
+                object_system::Object::Null
+            }
         }
         _ => object_system::Object::EvalError(object_system::EvalError {
             message: format!("index operator not supported: {:?}[{:?}]", left.object_type(), index.object_type()),
@@ -863,10 +1012,12 @@ fn eval_bang_operator_expression(right: object_system::Object) -> object_system:
 #[cfg(test)]
 mod tests {
     use crate::interpreter::*;
+    use crate::interpreter::evaluate::object_system::HashableObject;
     use crate::interpreter::{
         evaluate::*,
         ast::*
     };
+    use std::collections::HashMap;
 
     fn test_run(input: &str) -> object_system::Object {
         let lexer = lexer::Lexer::new(input.to_string());
@@ -881,6 +1032,105 @@ mod tests {
 
         let result = eval(program, &mut env);
         result
+    }
+
+    #[test]
+    fn test_hash_index_expressions() {
+        struct Test {
+            input: String,
+            expected: object_system::Object,
+        }
+
+        let inputs = vec![
+            Test {
+                input: "{\"foo\": 5}[\"foo\"]".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 5 }),
+            },
+            Test {
+                input: "{\"foo\": 5}[\"bar\"]".to_string(),
+                expected: object_system::Object::Null,
+            },
+            Test {
+                input: "let key = \"foo\"; {\"foo\": 5}[key]".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 5 }),
+            },
+            Test {
+                input: "{}[\"foo\"]".to_string(),
+                expected: object_system::Object::Null,
+            },
+            Test {
+                input: "{5: 5}[5]".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 5 }),
+            },
+            Test {
+                input: "{true: 5}[true]".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 5 }),
+            },
+            Test {
+                input: "{false: 5}[false]".to_string(),
+                expected: object_system::Object::Integer(object_system::Integer { value: 5 }),
+            },
+        ];
+
+        for input in inputs {
+            let result = test_run(&input.input);
+            assert_eq!(result, input.expected);
+        }
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let input = "
+            let two = \"two\";
+            {
+                \"one\": 10 - 9,
+                two: 1 + 1,
+                \"thr\" + \"ee\": 6 / 2,
+                4: 4,
+                true: 5,
+                false: 6
+            }";
+        let result = test_run(input);
+
+        let mut expected: HashMap<HashableObject, object_system::Object> = HashMap::new();
+
+        expected.insert(
+            object_system::HashableObject::StringObject(object_system::StringObject { value: "one".to_string() }),
+            object_system::Object::Integer(object_system::Integer { value: 1 }),
+        );
+        expected.insert(
+            object_system::HashableObject::StringObject(object_system::StringObject { value: "two".to_string() }),
+            object_system::Object::Integer(object_system::Integer { value: 2 }),
+        );
+        expected.insert(
+            object_system::HashableObject::StringObject(object_system::StringObject { value: "three".to_string() }),
+            object_system::Object::Integer(object_system::Integer { value: 3 }),
+        );
+        expected.insert(
+            object_system::HashableObject::Integer(object_system::Integer { value: 4 }),
+            object_system::Object::Integer(object_system::Integer { value: 4 }),
+        );
+        expected.insert(
+            object_system::HashableObject::Boolean(object_system::Boolean { value: true }),
+            object_system::Object::Integer(object_system::Integer { value: 5 }),
+        );
+        expected.insert(
+            object_system::HashableObject::Boolean(object_system::Boolean { value: false }),
+            object_system::Object::Integer(object_system::Integer { value: 6 }),
+        );
+
+        assert_eq!(result.object_type(), object_system::ObjectType::HashObject);
+        let result_hash = match result {
+            object_system::Object::HashObject(hash) => hash,
+            _ => panic!("result is not a hash object"),
+        };
+
+        assert_eq!(result_hash.pairs.len(), expected.len());
+
+        for (key, value) in expected {
+            let pair = result_hash.pairs.get(&key).unwrap();
+            assert_eq!(*pair, value);
+        }
     }
 
     #[test]
@@ -1223,6 +1473,12 @@ mod tests {
             Test {input: "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }".to_string(), expected: "unknown operator: BOOLEAN + BOOLEAN".to_string()},
             Test {input: "foobar".to_string(), expected: "Identifier not found: foobar".to_string()},
             Test {input: "\"Hello\" - \"World\"".to_string(), expected: "unknown operator: StringObject - StringObject".to_string()},
+            Test {input: "len(1)".to_string(), expected: "argument to `len` not supported, got INTEGER".to_string()},
+            Test {input: "len(\"one\", \"two\")".to_string(), expected: "wrong number of arguments. got=2, want=1".to_string()},
+            Test {input: "first(\"one\", \"two\")".to_string(), expected: "wrong number of arguments. got=2, want=1".to_string()},
+            Test {input: "last(\"one\", \"two\")".to_string(), expected: "wrong number of arguments. got=2, want=1".to_string()},
+            Test {input: "rest(\"one\", \"two\")".to_string(), expected: "wrong number of arguments. got=2, want=1".to_string()},
+            Test {input: "{\"name\" : \"Monkey\"}[fn(x) {x}];".to_string(), expected: "unusable as hash key: FunctionObject".to_string()},
         ];
 
         for input in inputs {

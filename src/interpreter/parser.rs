@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use crate::interpreter::{ast, lexer, tokens};
 
 #[derive(Debug, Clone)]
-
 pub struct ParserError {
     pub message: String,
 }
@@ -108,6 +107,7 @@ impl Parser {
         self.register_prefix_function(tokens::TokenType::FUNCTION, Parser::parse_function_literal);
         self.register_prefix_function(tokens::TokenType::STRING, Parser::parse_string_literal);
         self.register_prefix_function(tokens::TokenType::LBRACKET, Parser::parse_array_literal);
+        self.register_prefix_function(tokens::TokenType::LBRACE, Parser::parse_hash_literal);
     }
 
     fn register_prefix_function(&mut self, t: tokens::TokenType, f: fn(&mut Parser) -> Result<ast::Expression, ParserError>) {
@@ -195,6 +195,76 @@ impl Parser {
         }
 
         Ok(stmt)
+    }
+
+    fn parse_hash_literal(&mut self) -> Result<ast::Expression, ParserError> {
+        let hash = ast::HashLiteral {
+            token: self.cur_token.clone(),
+            pairs: match self.parse_hash_literal_pairs() {
+                Ok(pairs) => pairs,
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        };
+
+        Ok(ast::Expression::HashLiteral(hash))
+    }
+
+    fn parse_hash_literal_pairs(&mut self) -> Result<HashMap<ast::Expression, ast::Expression>, ParserError> {
+        let mut pairs = HashMap::new();
+
+        if self.peek_token_is(tokens::TokenType::RBRACE) {
+            self.next_token();
+            return Ok(pairs);
+        }
+
+        while !self.peek_token_is(tokens::TokenType::RBRACE) {
+            self.next_token();
+
+            let key = match self.parse_expression(ast::Precedence::LOWEST) {
+                Ok(exp) => exp,
+                Err(e) => {
+                    return Err(e);
+                }
+            };
+
+            match self.assert_peek(tokens::TokenType::COLON) {
+                Ok(_) => {},
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+
+            self.next_token();
+
+            let value = match self.parse_expression(ast::Precedence::LOWEST) {
+                Ok(exp) => exp,
+                Err(e) => {
+                    return Err(e);
+                }
+            };
+            pairs.insert(key, value);
+
+            if !self.peek_token_is(tokens::TokenType::RBRACE) && !self.peek_token_is(tokens::TokenType::COMMA) {
+                return Err(ParserError {
+                    message: format!("Expected next token to be '}}' or ',', got {:?} instead", self.peek_token.token_type),
+                });
+            }
+
+            if self.peek_token_is(tokens::TokenType::COMMA) {
+                self.next_token();
+            }
+        }
+
+        match self.assert_peek(tokens::TokenType::RBRACE) {
+            Ok(_) => {},
+            Err(e) => {
+                return Err(e);
+            }
+        }
+
+        Ok(pairs)
     }
 
     fn parse_string_literal(&mut self) -> Result<ast::Expression, ParserError> {
@@ -766,6 +836,142 @@ mod tests {
         };
 
         program
+    }
+
+    #[test]
+    fn test_parsing_hash_literals() {
+        let input = "{ \"one\": 1, \"two\": 2, \"three\": 3 }";
+        let program = test_run(input);
+
+        assert_eq!(program.statements.len(), 1);
+        let stmt = match program.statements[0].clone() {
+            ast::Statement::ExpressionStatement(stmt) => stmt,
+            _ => panic!("Expected ExpressionStatement"),
+        };
+
+        let hash = match stmt.expression {
+            ast::Expression::HashLiteral(hash) => hash,
+            _ => panic!("Expected HashLiteral"),
+        };
+
+        assert_eq!(hash.pairs.len(), 3);
+
+        let expected = vec![
+            ("one".to_string(), 1),
+            ("two".to_string(), 2),
+            ("three".to_string(), 3),
+        ];
+
+        for (key, value) in expected {
+            let pair = hash.pairs.get(&ast::Expression::StringLiteral(ast::StringLiteral {
+                token: tokens::Token::new(tokens::TokenType::STRING, key.clone()),
+                value: key.clone(),
+            }));
+
+            assert!(pair.is_some());
+            assert_eq!(pair.unwrap(), &ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+                token: tokens::Token::new(tokens::TokenType::INT, value.to_string()),
+                value: value,
+            }));
+        }
+    }
+
+    #[test]
+    fn test_parsing_empty_hash_literals() {
+        let input = "{}";
+        let program = test_run(input);
+
+        assert_eq!(program.statements.len(), 1);
+        let stmt = match program.statements[0].clone() {
+            ast::Statement::ExpressionStatement(stmt) => stmt,
+            _ => panic!("Expected ExpressionStatement"),
+        };
+
+        let hash = match stmt.expression {
+            ast::Expression::HashLiteral(hash) => hash,
+            _ => panic!("Expected HashLiteral"),
+        };
+
+        assert_eq!(hash.pairs.len(), 0);
+    }
+
+    #[test]
+    fn test_parsing_hash_literals_with_expressions() {
+        let input = "{ \"one\": 0 + 1, \"two\": 10 - 8, \"three\": 15 / 5 }";
+        let program = test_run(input);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let stmt = match program.statements[0].clone() {
+            ast::Statement::ExpressionStatement(stmt) => stmt,
+            _ => panic!("Expected ExpressionStatement"),
+        };
+
+        let hash = match stmt.expression {
+            ast::Expression::HashLiteral(hash) => hash,
+            _ => panic!("Expected HashLiteral"),
+        };
+
+        assert_eq!(hash.pairs.len(), 3);
+
+        let mut tests = HashMap::new();
+        tests.insert(
+            "one",
+            ast::Expression::InfixExpression(ast::InfixExpression {
+                token: tokens::Token::new(tokens::TokenType::PLUS, "+".to_string()),
+                left: Box::new(ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+                    token: tokens::Token::new(tokens::TokenType::INT, "0".to_string()),
+                    value: 0,
+                })),
+                operator: "+".to_string(),
+                right: Box::new(ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+                    token: tokens::Token::new(tokens::TokenType::INT, "1".to_string()),
+                    value: 1,
+                })),
+            }),
+        );
+
+        tests.insert(
+            "two",
+            ast::Expression::InfixExpression(ast::InfixExpression {
+                token: tokens::Token::new(tokens::TokenType::MINUS, "-".to_string()),
+                left: Box::new(ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+                    token: tokens::Token::new(tokens::TokenType::INT, "10".to_string()),
+                    value: 10,
+                })),
+                operator: "-".to_string(),
+                right: Box::new(ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+                    token: tokens::Token::new(tokens::TokenType::INT, "8".to_string()),
+                    value: 8,
+                })),
+            }),
+        );
+        
+        tests.insert(
+            "three",
+            ast::Expression::InfixExpression(ast::InfixExpression {
+                token: tokens::Token::new(tokens::TokenType::SLASH, "/".to_string()),
+                left: Box::new(ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+                    token: tokens::Token::new(tokens::TokenType::INT, "15".to_string()),
+                    value: 15,
+                })),
+                operator: "/".to_string(),
+                right: Box::new(ast::Expression::IntegerLiteral(ast::IntegerLiteral {
+                    token: tokens::Token::new(tokens::TokenType::INT, "5".to_string()),
+                    value: 5,
+                })),
+            }),
+        );
+
+        for (key, value) in tests {
+            let pair = hash.pairs.get(&ast::Expression::StringLiteral(ast::StringLiteral {
+                token: tokens::Token::new(tokens::TokenType::STRING, key.to_string().clone()),
+                value: key.to_string().clone(),
+            }));
+
+            assert!(pair.is_some());
+            assert_eq!(pair.unwrap(), &value);
+        }
     }
 
     #[test]

@@ -4,7 +4,7 @@ pub enum TokenType {
     ILLEGAL, EOF,
     IDENT, INT, STRING,
     ASSIGN, PLUS, MINUS, BANG, ASTERISK, SLASH, LT, GT, EQ, NotEq,
-    COMMA, SEMICOLON,
+    COMMA, SEMICOLON, COLON,
     LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET,
     FUNCTION, LET, TRUE, FALSE, IF, ELSE, RETURN
 }
@@ -30,7 +30,7 @@ pub enum TokenType {
 /// assert_eq!(token.token_type, TokenType::INT);
 /// assert_eq!(token.literal, "5");
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Token {
     /// The type of token.
     pub token_type: TokenType,

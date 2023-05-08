@@ -1,5 +1,8 @@
 use crate::interpreter::tokens::*;
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+
 /// Represents a node in the abstract syntax tree (AST) of the Monkey programming language.
 /// 
 /// # Examples
@@ -63,7 +66,7 @@ impl Interface for Program {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum Statement {
     LetStatement(LetStatement),
     ReturnStatement(ReturnStatement),
@@ -80,7 +83,7 @@ impl Interface for Statement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct LetStatement {
     pub token: Token,
     pub name: Identifier,
@@ -106,7 +109,7 @@ impl Interface for LetStatement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ReturnStatement {
     pub token: Token,
     pub return_value: Expression,
@@ -129,7 +132,7 @@ impl Interface for ReturnStatement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Expression,
@@ -141,7 +144,7 @@ impl Interface for ExpressionStatement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
@@ -154,6 +157,7 @@ pub enum Expression {
     StringLiteral(StringLiteral),
     ArrayLiteral(ArrayLiteral),
     IndexExpression(IndexExpression),
+    HashLiteral(HashLiteral),
 }
 
 impl Interface for Expression {
@@ -170,11 +174,43 @@ impl Interface for Expression {
             Expression::StringLiteral(string_literal) => string_literal.log(),
             Expression::ArrayLiteral(array_literal) => array_literal.log(),
             Expression::IndexExpression(index_expression) => index_expression.log(),
+            Expression::HashLiteral(hash_literal) => hash_literal.log(),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashLiteral {
+    pub token: Token,
+    pub pairs: HashMap<Expression, Expression>,
+}
+
+impl Hash for HashLiteral {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.token.hash(state);
+        self.pairs.hasher();
+    }
+}
+
+impl Interface for HashLiteral {
+    fn log(&self) -> String {
+        let mut output = String::new();
+
+        let mut pairs = Vec::new();
+
+        for (key, value) in &self.pairs {
+            pairs.push(format!("{}: {}", key.log(), value.log()));
+        }
+
+        output.push('{');
+        output.push_str(&pairs.join(", "));
+        output.push('}');
+
+        output
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct IndexExpression {
     pub token: Token,
     pub left: Box<Expression>,
@@ -196,7 +232,7 @@ impl Interface for IndexExpression {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ArrayLiteral {
     pub token: Token,
     pub elements: Vec<Expression>,
@@ -222,7 +258,7 @@ impl Interface for ArrayLiteral {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct StringLiteral {
     pub token: Token,
     pub value: String,
@@ -234,7 +270,7 @@ impl Interface for StringLiteral {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct CallExpression {
     pub token: Token,
     pub function: Box<Expression>,
@@ -262,7 +298,7 @@ impl Interface for CallExpression {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct FunctionLiteral {
     pub token: Token,
     pub parameters: Vec<Identifier>,
@@ -291,7 +327,7 @@ impl Interface for FunctionLiteral {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct IfExpression {
     pub token: Token,
     pub condition: Box<Expression>,
@@ -318,7 +354,7 @@ impl Interface for IfExpression {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct BlockStatement {
     pub token: Token,
     pub statements: Vec<Statement>,
@@ -340,7 +376,7 @@ impl Interface for BlockStatement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct BooleanLiteral {
     pub token: Token,
     pub value: bool,
@@ -352,7 +388,7 @@ impl Interface for BooleanLiteral {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct Identifier {
     pub token: Token,
     pub value: String,
@@ -364,7 +400,7 @@ impl Interface for Identifier {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct IntegerLiteral {
     pub token: Token,
     pub value: i64,
@@ -376,7 +412,7 @@ impl Interface for IntegerLiteral {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct PrefixExpression {
     pub token: Token,
     pub operator: String,
@@ -396,7 +432,7 @@ impl Interface for PrefixExpression {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct InfixExpression {
     pub token: Token,
     pub left: Box<Expression>,
