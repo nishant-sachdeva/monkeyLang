@@ -8,15 +8,15 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn build(mut args: Args) -> Result<Config, &'static str> {
+    pub fn build(mut args: Args) -> Option<Config> {
         args.next();
 
         let file_name = match args.next() {
             Some(arg) => arg,
-            None => return Err("Didn't get a file name"),
+            None => return None,
         };        
 
-        return Ok (Config {
+        return Some (Config {
             file_name: Box::new(PathBuf::from(file_name)),
         });
     }

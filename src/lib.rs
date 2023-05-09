@@ -13,7 +13,9 @@ use interpreter::{
 
 use std::fs;
 
-fn run_code(input: &str) -> object_system::Object {
+use crate::interpreter::evaluate::object_system::ObjectInterface;
+
+fn run_code(input: &str, env: Option<&mut environment::Environment>) -> object_system::Object {
     let lexer = lexer::Lexer::new(input.to_string());
     let mut parser = parser::Parser::new(lexer);
 
@@ -28,22 +30,72 @@ fn run_code(input: &str) -> object_system::Object {
         }
     };
 
-    let mut env = environment::Environment::new(Box::new(None));
-
-    let result = eval(program, &mut env);
+    let result = match env {
+        Some(env) => eval(program, env),
+        None => {
+            let mut env = environment::Environment::new(Box::new(None));
+            eval(program, &mut env)
+        }
+    };
     result
 }
 
-pub fn run_interpreter(config: &config::Config) -> object_system::Object {
+pub fn start_repl() {
+    let mut env = environment::Environment::new(Box::new(None));
+    loop {
+        // read input
+        println!(">>");
+        let mut input = String::new();
+        match std::io::stdin().read_line(&mut input) {
+            Ok(_) => {},
+            Err(e) => println!("Error reading input: {}", e),
+        }
+
+        // if input is "quit", break
+        if input.trim() == "quit" {
+            break;
+        }
+
+        // run code
+        let result = run_code(&input, Some(&mut env));
+
+        // print result
+        match result {
+            object_system::Object::Integer(i) => println!("{}", i.log()),
+            object_system::Object::Boolean(b) => println!("{}", b.log()),
+            object_system::Object::EvalError(e) => println!("{}", e.log()),
+            object_system::Object::ReturnValue(r) => println!("{}", r.log()),
+            object_system::Object::StringObject(s) => println!("{}", s.log()),
+            object_system::Object::ArrayObject(a) => println!("{}", a.log()),
+            _ => {}
+        }
+    }
+}
+
+pub fn start_interpreter(config: &config::Config) {
+    match run_interpreter(&config) {
+        object_system::Object::Integer(i) => println!("{:?}", i),
+        object_system::Object::Boolean(b) => println!("{:?}", b),
+        object_system::Object::Null => println!("null"),
+        object_system::Object::EvalError(e) => println!("{:?}", e),
+        object_system::Object::ReturnValue(r) => println!("{:?}", r),
+        object_system::Object::FunctionObject(f) => println!("{:?}", f),
+        object_system::Object::StringObject(s) => println!("{:?}", s),
+        object_system::Object::ArrayObject(a) => println!("{:?}", a),
+        object_system::Object::HashObject(h) => println!("{:?}", h),
+        object_system::Object::BuiltinFunctionObject(b) => println!("{:?}", b),
+    }
+}
+
+fn run_interpreter(config: &config::Config) -> object_system::Object {
     // read code from config file
     let code = fs::read_to_string(*config.file_name.clone())
         .expect("Something went wrong reading the file");
 
     // run code
-    let result = run_code(&code);
+    let result = run_code(&code, None);
     result
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -88,7 +140,7 @@ mod tests {
         ];
 
         for test in inputs {
-            let result = run_code(&test.input);
+            let result = run_code(&test.input, None);
             assert_eq!(result, test.expected);
         }
     }

@@ -949,9 +949,18 @@ fn eval_integer_infix_expression(operator: String, left: object_system::Object, 
         "*" => object_system::Object::Integer(object_system::Integer {
             value: left_val.value * right_val.value,
         }),
-        "/" => object_system::Object::Integer(object_system::Integer {
-            value: left_val.value / right_val.value,
-        }),
+        "/" => {
+            if right_val.value == 0 {
+                return object_system::Object::EvalError(
+                    object_system::EvalError {
+                        message: format!("division by zero"),
+                    }
+                );
+            }
+            object_system::Object::Integer(object_system::Integer {
+                value: left_val.value / right_val.value,
+            })
+        },
         "<" => object_system::Object::Boolean(object_system::Boolean {
             value: left_val.value < right_val.value,
         }),
