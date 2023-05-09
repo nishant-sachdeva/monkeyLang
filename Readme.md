@@ -12,18 +12,6 @@ let result = 10 * (20 / 2);
 
 let myArray = [1, 2, 3];
 
-let fibonacci = fn(x) {
-      if (x == 0) {
-          0
-      } else {
-          if (x == 1) {
-              1
-          } else {
-            fibonacci(x - 1) + fibonacci(x - 2);
-          }
-      }
-  };
-  
 let twice = fn(f, x) {
   return f(f(x));
 };
