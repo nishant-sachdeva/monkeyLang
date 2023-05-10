@@ -1,11 +1,12 @@
-use std::ops::Deref;
-
-use std::hash::{Hash, Hasher};
-
 pub use crate::interpreter::{
     ast,
     tokens
 };
+
+use std::ops::Deref;
+use std::hash::{Hash, Hasher};
+use std::rc::Rc;
+use std::cell::RefCell;
 
 pub mod object_system {
     use crate::interpreter::ast::Interface;
@@ -177,7 +178,7 @@ pub mod object_system {
         pub token: tokens::Token,
         pub parameters: Vec<ast::Identifier>,
         pub body: ast::BlockStatement,
-        pub env: std::rc::Rc<std::cell::RefCell<super::environment::Environment>>,
+        pub environ: Rc<RefCell<super::environment::Environment>>,
     }
 
     impl ObjectInterface for FunctionObject {
@@ -457,11 +458,11 @@ pub mod environment {
         /// # Returns
         ///
         /// A new environment.
-        pub fn new(outer: Box<Option<Environment>>) -> Environment {
+        pub fn new(outer: Option<Environment>) -> Environment {
             Environment {
                 store: std::collections::HashMap::new(),
-                outer: match *outer {
-                    Some(ref o) => Box::new(Some(o.clone())),
+                outer: match outer {
+                    Some(o) => Box::new(Some(o.clone())),
                     None => Box::new(None),
                 }
             }
@@ -544,7 +545,7 @@ fn eval_statement(statement: ast::Statement, env: &mut environment::Environment)
             })
         }
         ast::Statement::LetStatement(let_statement) => {
-            let value = eval_expression(let_statement.value.clone(), env);
+            let value = eval_expression(let_statement.value, env);
             if let object_system::Object::EvalError(_) = value {
                 return value;
             }
@@ -564,37 +565,50 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
             object_system::Object::Integer(object_system::Integer {
                 value: integer_literal.value,
             })
-        }
+        },
         ast::Expression::BooleanLiteral(bool_literal) => {
             object_system::Object::Boolean(object_system::Boolean{
                 value: bool_literal.value,
             })
-        }
+        },
         ast::Expression::PrefixExpression(prefix_expression) => {
             let right = eval_expression(*prefix_expression.right, env);
             eval_prefix_expression(prefix_expression.operator, right)
-        }
+        },
         ast::Expression::InfixExpression(infix_expression) => {
             let left = eval_expression(*infix_expression.left, env);
             let right = eval_expression(*infix_expression.right, env);
             eval_infix_expression(infix_expression.operator, left, right)
-        }
+        },
         ast::Expression::IfExpression(if_expression) => {
             eval_if_expression(if_expression, env)
-        }
+        },
         ast::Expression::Identifier(identifier) => {
             eval_identifier(identifier, env)
-        }
+        },
         ast::Expression::FunctionLiteral(function_literal) => {
             object_system::Object::FunctionObject(object_system::FunctionObject {
                 token: function_literal.token,
-                parameters: function_literal.parameters,
-                body: function_literal.body,
-                env: std::rc::Rc::new(std::cell::RefCell::new(env.clone())),
+                parameters: function_literal.parameters.clone(),
+                body: function_literal.body.clone(),
+                environ: Rc::new(RefCell::new(env.clone())),
             })
-        }
+        },
         ast::Expression::CallExpression(call_expression) => {
             let function = eval_expression(*call_expression.function, env);
+            let function = match function {
+                object_system::Object::FunctionObject(function_object) => {
+                    eval_expression(ast::Expression::FunctionLiteral(ast::FunctionLiteral {
+                        token: function_object.token,
+                        parameters: function_object.parameters,
+                        body: function_object.body,
+                    }), {
+                        function_object.environ.deref().borrow_mut().outer = Box::new(Some(env.clone()));
+                        &mut function_object.environ.borrow().deref().clone()
+                    })
+                },
+                _ => function,
+            };
             if let object_system::Object::EvalError(_) = function {
                 return function;
             }
@@ -610,12 +624,12 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
             }
 
             return apply_function(function, arguments);
-        }
+        },
         ast::Expression::StringLiteral(string_literal) => {
             object_system::Object::StringObject(object_system::StringObject {
                 value: string_literal.value,
             })
-        }
+        },
         ast::Expression::ArrayLiteral(array_literal) => {
             let elements = eval_expressions(array_literal.elements, env);
             if elements.len() == 1 && {
@@ -630,7 +644,7 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
             object_system::Object::ArrayObject(object_system::ArrayObject {
                 elements: elements,
             })
-        }
+        },
         ast::Expression::IndexExpression(index_expression) => {
             let left = eval_expression(*index_expression.left, env);
             if let object_system::Object::EvalError(_) = left {
@@ -641,7 +655,7 @@ fn eval_expression(expression: ast::Expression, env: &mut environment::Environme
                 return index;
             }
             eval_index_expression(left, index)
-        }
+        },
         ast::Expression::HashLiteral(hash_literal) => {
             eval_hash_literal(hash_literal, env)
         }
@@ -789,12 +803,11 @@ fn apply_function(function: object_system::Object, arguments: Vec<object_system:
 }
 
 fn apply_function_object(function_object: object_system::FunctionObject, arguments: Vec<object_system::Object>) -> object_system::Object {
-    let extended_env = extend_function_env(&function_object, arguments);
-    if let Err(e) = extended_env {
-        return e;
-    }
-    let mut env = extended_env.unwrap();
-    let evaluated = eval_block_statement(function_object.body, &mut env);
+    let mut extended_env = match extend_function_env(&function_object, arguments) {
+        Ok(env) => env,
+        Err(e) => return e,
+    };
+    let evaluated = eval_block_statement(function_object.body, &mut extended_env);
     unwrap_return_value(evaluated)
 }
 
@@ -814,7 +827,7 @@ fn apply_builtin_function(built_in_function: object_system::BuiltinFunctionObjec
 fn extend_function_env(function: &object_system::FunctionObject, arguments: Vec<object_system::Object>)
     -> Result<environment::Environment, object_system::Object> {
     let mut env = environment::Environment::new(
-        Box::new(Some(function.env.borrow().deref().clone())),
+        Some(function.environ.borrow().deref().clone()),
     );
     for (i, parameter) in function.parameters.iter().enumerate() {
         match env.set(&parameter.value, arguments[i].clone()) {
@@ -1045,10 +1058,27 @@ mod tests {
             Err(e) => panic!("{}", e.message),
         };
 
-        let mut env = environment::Environment::new(Box::new(None));
+        let mut env = environment::Environment::new(None);
 
         let result = eval(program, &mut env);
         result
+    }
+
+    #[test]
+    fn test_recursive_function_calls() {
+        let input = "
+        let countDown = fn(x) {
+            if (x == 0) {
+                return 0;
+            } else {
+                countDown(x - 1);
+            }
+        };
+        countDown(1);
+        ";
+
+        let result = test_run(input);
+        assert_eq!(result, object_system::Object::Integer(object_system::Integer { value: 0 }));
     }
 
     #[test]

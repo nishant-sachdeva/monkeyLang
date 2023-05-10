@@ -33,7 +33,7 @@ fn run_code(input: &str, env: Option<&mut environment::Environment>) -> object_s
     let result = match env {
         Some(env) => eval(program, env),
         None => {
-            let mut env = environment::Environment::new(Box::new(None));
+            let mut env = environment::Environment::new(None);
             eval(program, &mut env)
         }
     };
@@ -41,7 +41,7 @@ fn run_code(input: &str, env: Option<&mut environment::Environment>) -> object_s
 }
 
 pub fn start_repl() {
-    let mut env = environment::Environment::new(Box::new(None));
+    let mut env = environment::Environment::new(None);
     loop {
         // read input
         println!(">>");
