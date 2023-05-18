@@ -1,5 +1,7 @@
 pub mod config;
 pub mod interpreter;
+pub mod compiler;
+pub mod virtual_machine;
 
 use interpreter::{
     evaluate::{
