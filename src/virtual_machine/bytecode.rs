@@ -1,29 +1,24 @@
-use crate::object_system::Object;
-use std::vec;
+use std::{vec, hash::Hash};
 
-pub struct Bytecode {
-    pub instructions: Instructions,
-    pub constants: Vec<Object>,
-}
+type Byte = u8;
+type Instruction = Vec<Byte>;
+type _Instructions = Vec<Instruction>;
 
-type Instructions = Vec<Instruction>;
-type Instruction = Vec<u8>;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Opcode {
-    pub name: OpcodeName,
-    pub operand_widths: Vec<usize>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum OpcodeName {
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Copy)]
+pub enum OpCode {
     OpConstant,
 }
 
-impl Opcode {
-    pub fn new(name: OpcodeName) -> Opcode {
+#[derive(Debug, Clone)]
+pub struct OpcodeLayout {
+    pub name: OpCode,
+    pub operand_widths: Vec<usize>, // number of bytes each operand takes up
+}
+
+impl OpcodeLayout {
+    pub fn new(name: OpCode) -> Self {
         match name {
-            OpcodeName::OpConstant => Opcode {
+            OpCode::OpConstant => OpcodeLayout {
                 name,
                 operand_widths: vec![2],
             },
@@ -31,8 +26,38 @@ impl Opcode {
     }
 }
 
-pub fn make_instruction(opcode: Opcode, operands: Vec<usize>) -> Result<Instruction, String> {
-    let expected_operand_count = opcode.operand_widths.len();
+/// Creates a bytecode instruction from an opcode and operands
+/// 
+/// # Arguments
+/// 
+/// * `opcode_name` - The opcode to use
+/// * `operands` - The operands to use
+/// 
+/// # Returns
+/// 
+/// * `Result<Instruction, String>` - The bytecode instruction
+///     * `Ok(Instruction)` - The bytecode instruction
+///    * `Err(String)` - The error message
+/// 
+/// # Examples
+/// 
+/// ```
+/// use monkey_lang::virtual_machine::bytecode::{make_instruction, OpCode};
+/// 
+/// let result = make_instruction(OpCode::OpConstant, vec![65534]);
+/// assert_eq!(result, Ok(vec![0, 255, 254]));
+/// ```
+/// 
+/// ```
+/// use monkey_lang::virtual_machine::bytecode::{make_instruction, OpCode};
+/// 
+/// let result = make_instruction(OpCode::OpConstant, vec![65535]);
+/// assert_eq!(result, Ok(vec![0, 255, 255]));
+/// ```
+pub fn make_instruction(opcode_name: OpCode, operands: Vec<usize>) -> Result<Instruction, String> {
+    let opcode_layout = OpcodeLayout::new(opcode_name);
+    let expected_operand_count = opcode_layout.operand_widths.len();
+
     let actual_operand_count = operands.len();
 
     if expected_operand_count != actual_operand_count {
@@ -41,22 +66,23 @@ pub fn make_instruction(opcode: Opcode, operands: Vec<usize>) -> Result<Instruct
             expected_operand_count,
             actual_operand_count,
         ));
-    } else {
-        let mut byte_operands = Vec::new();
-        for i in 0..operands.len() {
-            let operand_width = opcode.operand_widths[i];
-            let operand = operands[i];
+    }
 
-            let mut bytes= match operand_width {
-                2 => (operand as u16).to_be_bytes().to_vec(),
-                _ => return Err(format!("Invalid operand width {}", operand_width)),
-            };
-            byte_operands.append(&mut bytes);
-        }
-        let mut instruction = vec![opcode.name as u8];
-        instruction.append(&mut byte_operands);
-        Ok(instruction)
-    } 
+    let mut byte_operands = Vec::new();
+    for i in 0..operands.len() {
+        let operand_width = opcode_layout.operand_widths[i];
+        let operand = operands[i];
+
+        let mut bytes= match operand_width {
+            1 => (operand as u8).to_be_bytes().to_vec(),
+            2 => (operand as u16).to_be_bytes().to_vec(),
+            _ => return Err(format!("Invalid operand width {}", operand_width)),
+        };
+        byte_operands.append(&mut bytes);
+    }
+    let mut instruction = vec![opcode_layout.name as u8];
+    instruction.append(&mut byte_operands);
+    Ok(instruction) 
 }
 
 
@@ -67,19 +93,24 @@ mod tests {
     #[test]
     fn test_make_instruction() {
         struct Test {
-            opcode: Opcode,
+            opcode: OpCode,
             operands: Vec<usize>,
             expected: Instruction,
         }
 
         let inputs = vec![
             Test {
-                opcode: Opcode::new(OpcodeName::OpConstant),
+                opcode: OpCode::OpConstant,
                 operands: vec![65534],
                 expected: vec![0, 255, 254],
             },
             Test {
-                opcode: Opcode::new(OpcodeName::OpConstant),
+                opcode: OpCode::OpConstant,
+                operands: vec![65535],
+                expected: vec![0, 255, 255],
+            },
+            Test {
+                opcode: OpCode::OpConstant,
                 operands: vec![45],
                 expected: vec![0, 0, 45],
             },
