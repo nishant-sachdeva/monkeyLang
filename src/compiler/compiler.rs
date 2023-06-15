@@ -2,8 +2,6 @@ use crate::{
     interpreter::evaluate::object_system::*,
     virtual_machine::bytecode::{
         Instructions,
-        make_bytecode,
-        OpCode
     },
     interpreter::ast,
 };
@@ -44,6 +42,7 @@ mod test {
     use core::panic;
     use std::vec;
     use crate::{parser::Parser, interpreter::lexer::Lexer};
+    use crate::virtual_machine::bytecode::{make_bytecode, OpCode};
 
     use super::*;
 
@@ -148,8 +147,8 @@ mod test {
         run_compiler_tests(input);
     }
 
-    // #[test]
-    // fn test_bytecode() {
-    //     unimplemented!()
-    // }
+    #[test]
+    fn test_bytecode() {
+        ()
+    }
 }
