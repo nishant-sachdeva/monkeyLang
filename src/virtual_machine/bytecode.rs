@@ -1,4 +1,4 @@
-use std::{vec, hash::Hash, collections::HashMap};
+use std::{vec, hash::Hash, collections::{HashMap}};
 use lazy_static::lazy_static;
 
 pub type Byte = u8;
@@ -17,7 +17,7 @@ pub struct OpCodeLayout {
 }
 
 lazy_static! {
-    static ref OpCodeLayouts: HashMap<OpCode, OpCodeLayout> = {
+    static ref OPCODE_LAYOUTS: HashMap<OpCode, OpCodeLayout> = {
         HashMap::from([
             (
                 OpCode::OpConstant,
@@ -28,6 +28,13 @@ lazy_static! {
             ),
         ])
     };
+}
+
+pub fn opcode_lookup(opcode: u8) -> Result<OpCode, String> {
+    match opcode {
+        0 => Ok(OpCode::OpConstant),
+        _ => Err(format!("Opcode {} not found", opcode)),
+    }
 }
 
 /// Creates a bytecode instruction from an opcode and operands
@@ -59,9 +66,9 @@ lazy_static! {
 /// assert_eq!(result, Ok(vec![0, 255, 255]));
 /// ```
 pub fn make_bytecode(opcode_name: OpCode, operands: Vec<usize>) -> Result<Instruction, String> {
-    let opcode_layout = match OpCodeLayouts.get(opcode_name) {
-        Ok(layout) => layout,
-        Err(error) => return Err(error),
+    let opcode_layout = match OPCODE_LAYOUTS.get(&opcode_name) {
+        Some(layout) => layout,
+        None => return Err(format!("Opcode {} not found", opcode_name as u8)),
     };
     let expected_operand_count = opcode_layout.operand_widths.len();
 
@@ -106,32 +113,75 @@ pub fn get_raw_assembly(instructions: Instructions) -> Result<String, String> {
     Ok(bytecode)
 }
 
-pub fn format_raw_assembly(bytecode: Vec<Byte>) -> Result<String, String> {
-    let mut result = String::new();
-    for instruction in bytecode {
-        result = result + &mut format!("{:?}", instruction) + "\n";
-    }
-    Ok(result)
-}
-
 pub fn read_operands(opcode: OpCode, operands: &str) -> Result<(Vec<usize>, usize), String> {
-    let opcode_layout = match OpCodeLayouts.get(opcode) {
-        Ok(layout) => layout,
-        Err(error) => return Err(error),
+    println!("opcode: {:?}", opcode);
+    println!("operands: {:?}", operands);
+
+    // let operands = operands.as_bytes();
+    // println!("operands: {:?}", operands);
+
+    let opcode_layout = match OPCODE_LAYOUTS.get(&opcode) {
+        Some(layout) => layout,
+        None => return Err(format!("Opcode {} not found", opcode as u8)),
     };
 
     let mut offset = 0;
     let mut operands_vec = Vec::new();
-    for operand_width in opcode_layout.operand_widths {
+    for operand_width in opcode_layout.clone().operand_widths {
         let operand = match operand_width {
-            1 => operands[offset..offset + 1].parse::<usize>().unwrap(),
-            2 => operands[offset..offset + 2].parse::<usize>().unwrap(),
+            2 => {
+                usize::from_str_radix(&operands[offset..(offset + 2*operand_width)], 16).unwrap()
+            }
             _ => return Err(format!("Invalid operand width {}", operand_width)),
         };
         operands_vec.push(operand);
         offset += operand_width;
     }
     Ok((operands_vec, offset))
+}
+
+pub fn format_instruction(opcode: OpCode, operands: Vec<usize>) -> String {
+    let opcode_layout = match OPCODE_LAYOUTS.get(&opcode) {
+        Some(layout) => layout,
+        None => return format!("Opcode {} not found", opcode as u8),
+    };
+
+    let operand_count = opcode_layout.operand_widths.len();
+    if operands.len() != operand_count {
+        return format!(
+            "Expected {} operands, got {}",
+            operand_count,
+            operands.len()
+        );
+    }
+
+    match opcode {
+        OpCode::OpConstant => format!("OpConstant {:?}", operands[0]),
+    }
+}
+
+pub fn format_raw_assembly(bytecode: String) -> Result<String, String> {
+    // break bytecode by /n into a vector of Strings
+    let mut bytecode = bytecode.split("\n").collect::<Vec<&str>>();
+    bytecode.pop(); // remove last element, which is an empty string
+    println!("bytecode: {:?}", bytecode);
+
+    let mut result = String::new();
+    let mut offset = 0;
+    for instruction in bytecode {
+        // get instruction opcode
+        let opcode = opcode_lookup(instruction[0..1].parse::<u8>().unwrap()).unwrap();
+
+        // get instruction operands
+        let (operands, bytes_read) = read_operands(opcode, &instruction[2..]).unwrap();
+
+        // format instruction
+        result = result + &format!("{:04} ", offset) + &format_instruction(opcode, operands) + "\n";
+
+        // increment offset
+        offset += bytes_read + 1;
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -160,9 +210,9 @@ mod tests {
             ).unwrap();
 
             // first byte of the instruction should be the opcode.
-            let opcode = opcode_lookup(instruction[0..1].as_bytes()[0]).unwrap();
+            let opcode = opcode_lookup(instruction[0..1].parse::<u8>().unwrap()).unwrap();
 
-            let (operands, bytes_read) = read_operands(opcode, &instruction[1..]).unwrap();
+            let (operands, bytes_read) = read_operands(opcode, &instruction[2..instruction.len()-1]).unwrap();
 
             assert_eq!(bytes_read, input.bytes_read);
             for (i, operand) in input.operands.iter().enumerate() {
@@ -174,23 +224,19 @@ mod tests {
     #[test]
     fn test_format_raw_assembly() {
         struct Test {
-            bytecode: Vec<Byte>,
+            raw_assembly: String,
             expected: String,
         }
 
         let inputs = vec![
             Test {
-                bytecode: vec![
-                    0, 0, 1,
-                    0, 0, 2,
-                    0, 255, 255,
-                ],
-                expected: String::from("0\n0\n1\n0\n0\n2\n0\n255\n255\n"),
+                raw_assembly: "000001\n000002\n00FFFF\n00FFFE\n".to_string(),
+                expected: String::from("0000 OpConstant 1\n0003 OpConstant 2\n0006 OpConstant 65535\n0009 OpConstant 65534\n"),
             },
         ];
 
         for test in inputs {
-            let result = match format_raw_assembly(test.bytecode) {
+            let result = match format_raw_assembly(test.raw_assembly) {
                 Ok(result) => result,
                 Err(error) => panic!("Error: {}", error),
             };
