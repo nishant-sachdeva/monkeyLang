@@ -2,6 +2,8 @@ use crate::{
     interpreter::evaluate::object_system::*,
     virtual_machine::bytecode::{
         Instructions,
+        OpCode,
+        make_bytecode,
     },
     interpreter::ast,
 };
@@ -26,6 +28,80 @@ impl Compiler {
     }
 
     pub fn compile(&mut self, _program: &mut ast::Program) -> Result<(), String> {
+        for statement in _program.statements.iter() {
+            let result = self.compile_statement(statement);
+
+            match result {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
+        }
+        return Ok(());
+    }
+
+    fn compile_statement(&mut self, statement: &ast::Statement) -> Result<(), String> {
+        match statement {
+            ast::Statement::ExpressionStatement(expression_statement) => {
+                let result = self.compile_expression(&expression_statement.expression);
+
+                match result {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            _ => return Err(format!("Statement type not supported: {:?}", statement)),
+        }
+
+        return Ok(());
+    }
+
+    fn compile_expression(&mut self, expression: &ast::Expression) -> Result<(), String> {
+        match expression {
+            ast::Expression::InfixExpression(infix) => {
+                let result = self.compile_expression(&infix.left);
+
+                match result {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+
+                let result = self.compile_expression(&infix.right);
+
+                match result {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            ast::Expression::IntegerLiteral(integer) => {
+                let integer_object = Object::Integer(Integer { value: integer.value });
+                let constant_index = self.add_constant(integer_object);
+
+                let result = self.emit(OpCode::OpConstant, vec![constant_index]);
+
+                match result {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            _ => return Err(format!("Expression type not supported: {:?}", expression)),
+        }
+
+        return Ok(());
+    }
+
+    fn add_constant(&mut self, object: Object) -> usize {
+        self.constants.push(object);
+        return self.constants.len() - 1;
+    }
+
+    fn emit(&mut self, opcode: OpCode, operands: Vec<usize>) -> Result<(), String> {
+        let instruction = match make_bytecode(opcode, operands) {
+            Ok(instruction) => instruction,
+            Err(e) => return Err(e),
+        };
+
+        self.instructions.push(instruction);
+
         return Ok(());
     }
 
@@ -111,17 +187,17 @@ mod test {
 
             assert_eq!(result, Ok(()));
 
-            let bytecode = match compiler.bytecode() {
+            let _bytecode = match compiler.bytecode() {
                 Ok(bytecode) => bytecode,
                 Err(e) => panic!("{e}"),
             };
 
-            _ = match test_instructions(test.expected_instructions, bytecode.instructions) {
+            _ = match test_instructions(test.expected_instructions, compiler.instructions) {
                 Ok(_) => (),
                 Err(e) => panic!("{e}"),
             };
 
-            _ = match test_constants(test.expected_constants, bytecode.constants) {
+            _ = match test_constants(test.expected_constants, compiler.constants) {
                 Ok(_) => (),
                 Err(e) => panic!("{e}"),
             };
