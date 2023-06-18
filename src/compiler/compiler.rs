@@ -4,13 +4,14 @@ use crate::{
         Instructions,
         OpCode,
         make_bytecode,
+        get_raw_assembly,
     },
     interpreter::ast,
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ByteCode {
-    pub instructions: Instructions,
+pub struct RawAssembly {
+    pub instructions: String,
     pub constants: Vec<Object>,
 }
 
@@ -105,11 +106,14 @@ impl Compiler {
         return Ok(());
     }
 
-    pub fn bytecode(&mut self) -> Result<ByteCode, String> {
-        return Ok(ByteCode {
-            instructions: Vec::new(),
-            constants: Vec::new(),
-        });
+    pub fn raw_assembly(&mut self) -> Result<RawAssembly, String> {
+        return Ok(RawAssembly {
+            instructions: match get_raw_assembly(self.instructions.clone()) {
+                Ok(instructions) => instructions,
+                Err(e) => return Err(e),
+            },
+            constants: self.constants.clone(),
+        })
     }
 }
 
@@ -187,7 +191,7 @@ mod test {
 
             assert_eq!(result, Ok(()));
 
-            let _bytecode = match compiler.bytecode() {
+            let _raw_assembly = match compiler.raw_assembly() {
                 Ok(bytecode) => bytecode,
                 Err(e) => panic!("{e}"),
             };

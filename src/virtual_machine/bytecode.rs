@@ -108,9 +108,33 @@ pub fn get_raw_assembly(instructions: Instructions) -> Result<String, String> {
                 .iter()
                 .map(|byte| format!("{:02X}", byte)) // format as hexadecimals
                 .collect::<String>()
-        ) + "\n";
+        );
     }
     Ok(bytecode)
+}
+
+pub fn format_raw_assembly(raw_assembly: String) -> Result<String, String> {
+    println!("bytecode: {:?}", raw_assembly);
+    let mut result = String::new();
+    let mut offset = 0;
+
+    while offset < raw_assembly.len() {
+        let opcode = opcode_lookup(
+            raw_assembly[offset..(offset+1)].parse::<u8>().unwrap()
+        ).unwrap();
+        println!("opcode: {:?}", opcode);
+
+        // get instruction operands
+        let (operands, bytes_read) = read_operands(opcode, &raw_assembly[(offset+2)..]).unwrap();
+
+        // format instruction
+        result = result + &format!("{:04} ", offset/2) + &format_instruction(opcode, operands) + "\n";
+
+        // increment offset
+        offset += 2*(1 + bytes_read);
+    }
+    
+    Ok(result)
 }
 
 pub fn read_operands(opcode: OpCode, operands: &str) -> Result<(Vec<usize>, usize), String> {
@@ -127,7 +151,7 @@ pub fn read_operands(opcode: OpCode, operands: &str) -> Result<(Vec<usize>, usiz
 
     let mut offset = 0;
     let mut operands_vec = Vec::new();
-    for operand_width in opcode_layout.clone().operand_widths {
+    for operand_width in opcode_layout.operand_widths.iter() {
         let operand = match operand_width {
             2 => {
                 usize::from_str_radix(&operands[offset..(offset + 2*operand_width)], 16).unwrap()
@@ -160,30 +184,6 @@ pub fn format_instruction(opcode: OpCode, operands: Vec<usize>) -> String {
     }
 }
 
-pub fn format_raw_assembly(bytecode: String) -> Result<String, String> {
-    // break bytecode by /n into a vector of Strings
-    let mut bytecode = bytecode.split("\n").collect::<Vec<&str>>();
-    bytecode.pop(); // remove last element, which is an empty string
-    println!("bytecode: {:?}", bytecode);
-
-    let mut result = String::new();
-    let mut offset = 0;
-    for instruction in bytecode {
-        // get instruction opcode
-        let opcode = opcode_lookup(instruction[0..1].parse::<u8>().unwrap()).unwrap();
-
-        // get instruction operands
-        let (operands, bytes_read) = read_operands(opcode, &instruction[2..]).unwrap();
-
-        // format instruction
-        result = result + &format!("{:04} ", offset) + &format_instruction(opcode, operands) + "\n";
-
-        // increment offset
-        offset += bytes_read + 1;
-    }
-    Ok(result)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,7 +212,9 @@ mod tests {
             // first byte of the instruction should be the opcode.
             let opcode = opcode_lookup(instruction[0..1].parse::<u8>().unwrap()).unwrap();
 
-            let (operands, bytes_read) = read_operands(opcode, &instruction[2..instruction.len()-1]).unwrap();
+            let (operands, bytes_read) = read_operands(opcode, &instruction[2..instruction.len()]).unwrap();
+            println!("operands_vec: {:?}", operands);
+            println!("offset: {:?}", bytes_read);
 
             assert_eq!(bytes_read, input.bytes_read);
             for (i, operand) in input.operands.iter().enumerate() {
@@ -230,7 +232,7 @@ mod tests {
 
         let inputs = vec![
             Test {
-                raw_assembly: "000001\n000002\n00FFFF\n00FFFE\n".to_string(),
+                raw_assembly: "00000100000200FFFF00FFFE".to_string(),
                 expected: String::from("0000 OpConstant 1\n0003 OpConstant 2\n0006 OpConstant 65535\n0009 OpConstant 65534\n"),
             },
         ];
@@ -260,13 +262,13 @@ mod tests {
                     make_bytecode(OpCode::OpConstant, vec![65535]).unwrap(),
                     make_bytecode(OpCode::OpConstant, vec![65534]).unwrap(),
                 ],
-                expected: String::from("000001\n000002\n00FFFF\n00FFFE\n"),
+                expected: String::from("00000100000200FFFF00FFFE"),
             },
             Test {
                 bytecode: vec![
                     make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
                 ],
-                expected: String::from("000001\n"),
+                expected: String::from("000001"),
             }
         ];
 
