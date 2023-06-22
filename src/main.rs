@@ -2,7 +2,8 @@ pub use monkey_lang::{
     config::Config,
     interpreter::evaluate,
     start_interpreter,
-    start_repl
+    start_repl,
+    start_compiler_repl
 };
 
 fn main() {
@@ -13,7 +14,7 @@ fn main() {
         },
         None => {
             println!("Running REPL");
-            start_repl()
+            start_compiler_repl()
         }
     };
 }

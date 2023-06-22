@@ -13,6 +13,9 @@ use interpreter::{
     lexer,
 };
 
+use compiler::compiler::Compiler;
+use virtual_machine::virtual_machine::VirtualMachine;
+
 use std::fs;
 
 use crate::interpreter::evaluate::object_system::ObjectInterface;
@@ -40,6 +43,100 @@ fn run_code(input: &str, env: Option<&mut environment::Environment>) -> object_s
         }
     };
     result
+}
+
+pub fn compile_and_run(input: &str) -> object_system::Object {
+    let lexer = lexer::Lexer::new(input.to_string());
+    let mut parser = parser::Parser::new(lexer);
+
+    let mut program = match parser.parse_program() {
+        Ok(program) => program,
+        Err(e) => {
+            return object_system::Object::EvalError(
+                object_system::EvalError{
+                    message: e.message
+                }
+            )
+        }
+    };
+
+    let mut compiler = Compiler::new();
+    match compiler.compile(&mut program) {
+        Ok(_) => (),
+        Err(e) => {
+            return object_system::Object::EvalError(
+                object_system::EvalError{
+                    message: e
+                }
+            )
+        }
+    }
+
+    let bytecode = match compiler.raw_assembly() {
+        Ok(bytecode) => bytecode,
+        Err(e) => {
+            return object_system::Object::EvalError(
+                object_system::EvalError{
+                    message: e
+                }
+            )
+        }
+    };
+
+    let mut vm = VirtualMachine::new(bytecode);
+
+    match vm.run() {
+        Ok(_) => (),
+        Err(e) => {
+            return object_system::Object::EvalError(
+                object_system::EvalError{
+                    message: e
+                }
+            )
+        }
+    }
+
+    let result = match vm.stack_top() {
+        Ok(object) => object,
+        Err(e) => object_system::Object::EvalError(
+            object_system::EvalError{
+                message: e
+            }
+        ),
+    };
+
+    result
+}
+
+pub fn start_compiler_repl() {
+    loop {
+        // read input
+        println!(">>");
+        let mut input = String::new();
+        match std::io::stdin().read_line(&mut input) {
+            Ok(_) => {},
+            Err(e) => println!("Error reading input: {}", e),
+        }
+
+        // if input is "quit", break
+        if input.trim() == "quit" {
+            break;
+        }
+
+        // run code
+        let result = compile_and_run(&input);
+
+        // print result
+        match result {
+            object_system::Object::Integer(i) => println!("{}", i.log()),
+            object_system::Object::Boolean(b) => println!("{}", b.log()),
+            object_system::Object::EvalError(e) => println!("{}", e.log()),
+            object_system::Object::ReturnValue(r) => println!("{}", r.log()),
+            object_system::Object::StringObject(s) => println!("{}", s.log()),
+            object_system::Object::ArrayObject(a) => println!("{}", a.log()),
+            _ => {}
+        }
+    }
 }
 
 pub fn start_repl() {
