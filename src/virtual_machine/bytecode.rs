@@ -8,6 +8,7 @@ pub type Instructions = Vec<Instruction>;
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Copy)]
 pub enum OpCode {
     OpConstant,
+    OpAdd,
 }
 
 #[derive(Debug, Clone)]
@@ -26,13 +27,21 @@ lazy_static! {
                     operand_widths: vec![2],
                 },
             ),
+            (
+                OpCode::OpAdd,
+                OpCodeLayout {
+                    name: OpCode::OpAdd,
+                    operand_widths: vec![],
+                },
+            )
         ])
     };
 }
 
-pub fn opcode_lookup(opcode: u8) -> Result<OpCode, String> {
+pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
     match opcode {
         0 => Ok(OpCode::OpConstant),
+        1 => Ok(OpCode::OpAdd),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }
@@ -120,7 +129,7 @@ pub fn format_raw_assembly(raw_assembly: String) -> Result<String, String> {
 
     while offset < raw_assembly.len() {
         let opcode = opcode_lookup(
-            raw_assembly[offset..(offset+1)].parse::<u8>().unwrap()
+            raw_assembly[offset..(offset+2)].parse::<usize>().unwrap()
         ).unwrap();
         println!("opcode: {:?}", opcode);
 
@@ -181,6 +190,7 @@ pub fn format_instruction(opcode: OpCode, operands: Vec<usize>) -> String {
 
     match opcode {
         OpCode::OpConstant => format!("OpConstant {:?}", operands[0]),
+        OpCode::OpAdd => format!("OpAdd"),
     }
 }
 
@@ -202,15 +212,23 @@ mod tests {
                 operands: vec![65534],
                 bytes_read: 2,
             },
+            Test {
+                opcode: OpCode::OpAdd,
+                operands: vec![],
+                bytes_read: 0,
+            },
         ];
 
         for input in inputs {
             let instruction = get_raw_assembly(
                 vec![make_bytecode(input.opcode, input.operands.clone()).unwrap()]
             ).unwrap();
+            // println!("instruction: {:?}", instruction);
 
-            // first byte of the instruction should be the opcode.
-            let opcode = opcode_lookup(instruction[0..1].parse::<u8>().unwrap()).unwrap();
+            let opcode = opcode_lookup(
+                instruction[0..2].parse::<usize>().unwrap()
+            ).unwrap();
+            // println!("opcode: {:?}", opcode);
 
             let (operands, bytes_read) = read_operands(opcode, &instruction[2..instruction.len()]).unwrap();
             println!("operands_vec: {:?}", operands);
@@ -235,6 +253,14 @@ mod tests {
                 raw_assembly: "00000100000200FFFF00FFFE".to_string(),
                 expected: String::from("0000 OpConstant 1\n0003 OpConstant 2\n0006 OpConstant 65535\n0009 OpConstant 65534\n"),
             },
+            Test {
+                raw_assembly: "000001".to_string(),
+                expected: String::from("0000 OpConstant 1\n"),
+            },
+            Test {
+                raw_assembly: "01000001000002".to_string(),
+                expected: String::from("0000 OpAdd\n0001 OpConstant 1\n0004 OpConstant 2\n"),
+            }
         ];
 
         for test in inputs {
@@ -269,7 +295,15 @@ mod tests {
                     make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
                 ],
                 expected: String::from("000001"),
-            }
+            },
+            Test {
+                bytecode: vec![
+                    make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![2]).unwrap(),
+                ],
+                expected: String::from("01000001000002"),
+            },
         ];
 
         for test in inputs {
@@ -315,7 +349,17 @@ mod tests {
                 opcode: OpCode::OpConstant,
                 operands: vec![1],
                 expected: vec![0, 0, 1],
-            }
+            },
+            Test {
+                opcode: OpCode::OpConstant,
+                operands: vec![2],
+                expected: vec![0, 0, 2],
+            },
+            Test {
+                opcode: OpCode::OpAdd,
+                operands: vec![],
+                expected: vec![1],
+            },
         ];
 
         for test in inputs {

@@ -226,9 +226,4 @@ mod test {
 
         run_compiler_tests(input);
     }
-
-    #[test]
-    fn test_bytecode() {
-        ()
-    }
 }

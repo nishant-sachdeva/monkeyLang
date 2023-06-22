@@ -1,12 +1,8 @@
-use std::collections::btree_map::Range;
-
 use crate::object_system::Object;
 use crate::compiler::compiler::RawAssembly;
 use crate::virtual_machine::bytecode::{
     OpCode,
-    Instructions,
     opcode_lookup,
-    Instruction
 };
 
 pub const STACK_SIZE: usize = 2048;
@@ -63,7 +59,7 @@ impl VirtualMachine {
         let mut stack_pointer = 0;
         while stack_pointer < self.assembly.instructions.len() {
             let opcode = opcode_lookup(
-                self.assembly.instructions[stack_pointer..stack_pointer+1].parse::<u8>().unwrap()
+                self.assembly.instructions[stack_pointer..stack_pointer+1].parse::<usize>().unwrap()
             ).unwrap();
             stack_pointer += 2;
 
@@ -78,7 +74,8 @@ impl VirtualMachine {
                         Ok(_) => (),
                         Err(e) => return Err(e),
                     }
-                }
+                },
+                _ => return Err(format!("Opcode not supported: {:?}", opcode)),
             }
         }
 
