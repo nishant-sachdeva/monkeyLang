@@ -9,6 +9,7 @@ pub type Instructions = Vec<Instruction>;
 pub enum OpCode {
     OpConstant,
     OpAdd,
+    OpPop,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +34,13 @@ lazy_static! {
                     name: OpCode::OpAdd,
                     operand_widths: vec![],
                 },
+            ),
+            (
+                OpCode::OpPop,
+                OpCodeLayout {
+                    name: OpCode::OpPop,
+                    operand_widths: vec![],
+                },
             )
         ])
     };
@@ -42,6 +50,7 @@ pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
     match opcode {
         0 => Ok(OpCode::OpConstant),
         1 => Ok(OpCode::OpAdd),
+        2 => Ok(OpCode::OpPop),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }
@@ -191,6 +200,7 @@ pub fn format_instruction(opcode: OpCode, operands: Vec<usize>) -> String {
     match opcode {
         OpCode::OpConstant => format!("OpConstant {:?}", operands[0]),
         OpCode::OpAdd => format!("OpAdd"),
+        OpCode::OpPop => format!("OpPop"),
     }
 }
 
@@ -260,7 +270,11 @@ mod tests {
             Test {
                 raw_assembly: "01000001000002".to_string(),
                 expected: String::from("0000 OpAdd\n0001 OpConstant 1\n0004 OpConstant 2\n"),
-            }
+            },
+            Test {
+                raw_assembly: "0100000100000202".to_string(),
+                expected: String::from("0000 OpAdd\n0001 OpConstant 1\n0004 OpConstant 2\n0007 OpPop\n"),
+            },
         ];
 
         for test in inputs {

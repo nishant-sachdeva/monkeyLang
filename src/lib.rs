@@ -96,7 +96,7 @@ pub fn compile_and_run(input: &str) -> object_system::Object {
         }
     }
 
-    let result = match vm.stack_top() {
+    let result = match vm.stack.last_popped_stack_element() {
         Ok(object) => object,
         Err(e) => object_system::Object::EvalError(
             object_system::EvalError{

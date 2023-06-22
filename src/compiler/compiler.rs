@@ -49,6 +49,11 @@ impl Compiler {
                     Ok(_) => (),
                     Err(e) => return Err(e),
                 }
+
+                let _ = match self.emit(OpCode::OpPop, vec![]) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
             },
             _ => return Err(format!("Statement type not supported: {:?}", statement)),
         }
@@ -227,6 +232,7 @@ mod test {
                     make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
                     make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
                     make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ],
             }
         ];

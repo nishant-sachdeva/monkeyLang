@@ -1,3 +1,4 @@
+use crate::interpreter::evaluate::object_system;
 use crate::object_system::Object;
 use crate::compiler::compiler::RawAssembly;
 use crate::virtual_machine::bytecode::{
@@ -15,7 +16,7 @@ pub struct VmStack {
 impl VmStack {
     pub fn new() -> Self {
         VmStack {
-            stack: Vec::with_capacity(STACK_SIZE),
+            stack: vec![object_system::Object::Null; STACK_SIZE],
             stack_pointer: 0,
         }
     }
@@ -25,7 +26,13 @@ impl VmStack {
             return Err(String::from("Stack is empty"));
         }
 
-        let stack_top = self.stack.get(self.stack_pointer - 1).unwrap();
+        let stack_top = self.stack[self.stack_pointer - 1].clone();
+
+        return Ok(stack_top.clone());
+    }
+
+    pub fn last_popped_stack_element(&self) -> Result<Object, String> {
+        let stack_top = self.stack[self.stack_pointer].clone();
 
         return Ok(stack_top.clone());
     }
@@ -35,14 +42,17 @@ impl VmStack {
             return Err(String::from("Stack is empty"));
         }
 
-        let stack_top = self.stack.pop().unwrap();
+        let stack_top = self.stack[self.stack_pointer - 1].clone();
         self.stack_pointer -= 1;
 
         return Ok(stack_top);
     }
 
     pub fn push_constant(&mut self, object: Object) -> Result<(), String> {
-        self.stack.push(object);
+        if self.stack_pointer >= STACK_SIZE {
+            return Err(String::from("Stack overflow"));
+        }
+        self.stack[self.stack_pointer] = object.clone();
         self.stack_pointer += 1;
 
         return Ok(());
@@ -116,7 +126,13 @@ impl VirtualMachine {
                         },
                         _ => return Err(String::from("Unsupported types for addition")),
                     }
-                }
+                },
+                OpCode::OpPop => {
+                    match self.stack.stack_pop() {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    }
+                },           
             }
         }
 
@@ -150,7 +166,7 @@ mod tests {
                 test_integer_object(integer.value, actual)
             },
             _ => {
-                return Err(format!("Wrong object type.\nExpected: Integer\nActual: {:?}", actual));
+                return Err(format!("Wrong object type. Expected: Integer Actual: {:?}", actual));
             }
         }
     }
@@ -159,11 +175,11 @@ mod tests {
         match actual {
             Object::Integer(integer) => {
                 if integer.value != expected {
-                    return Err(format!("Wrong integer value.\nExpected: {}\nActual: {}", expected, integer.value));
+                    return Err(format!("Wrong integer value. Expected: {} Actual: {}", expected, integer.value));
                 }
             },
             _ => {
-                return Err(format!("Wrong object type.\nExpected: Integer\nActual: {:?}", actual));
+                return Err(format!("Wrong object type. Expected: Integer Actual: {:?}", actual));
             }
         }
 
@@ -186,14 +202,16 @@ mod tests {
                 Err(e) => panic!("{e}"),
             }
 
-            let mut vm = VirtualMachine::new(compiler.raw_assembly().unwrap());
+            let mut vm = VirtualMachine::new(
+                compiler.raw_assembly().unwrap()
+            );
 
             match vm.run() {
                 Ok(_) => (),
                 Err(e) => panic!("{e}"),
             }
 
-            let stack_element = vm.stack_top().unwrap();
+            let stack_element = vm.stack.last_popped_stack_element().unwrap();
 
             test_expected_object(
                 test.expected_stack.get(0).unwrap().clone(),
