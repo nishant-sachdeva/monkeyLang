@@ -30,6 +30,17 @@ impl VmStack {
         return Ok(stack_top.clone());
     }
 
+    pub fn stack_pop(&mut self) -> Result<Object, String> {
+        if self.stack_pointer == 0 {
+            return Err(String::from("Stack is empty"));
+        }
+
+        let stack_top = self.stack.pop().unwrap();
+        self.stack_pointer -= 1;
+
+        return Ok(stack_top);
+    }
+
     pub fn push_constant(&mut self, object: Object) -> Result<(), String> {
         self.stack.push(object);
         self.stack_pointer += 1;
@@ -55,11 +66,15 @@ impl VirtualMachine {
         self.stack.stack_top()
     }
 
+    pub fn stack_pop(&mut self) -> Result<Object, String> {
+        self.stack.stack_pop()
+    }
+
     pub fn run(&mut self) -> Result<(), String> {
         let mut stack_pointer = 0;
         while stack_pointer < self.assembly.instructions.len() {
             let opcode = opcode_lookup(
-                self.assembly.instructions[stack_pointer..stack_pointer+1].parse::<usize>().unwrap()
+                self.assembly.instructions[stack_pointer..stack_pointer+2].parse::<usize>().unwrap()
             ).unwrap();
             stack_pointer += 2;
 
@@ -75,7 +90,33 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     }
                 },
-                _ => return Err(format!("Opcode not supported: {:?}", opcode)),
+                OpCode::OpAdd => {
+                    let right = match self.stack_pop() {
+                        Ok(object) => object,
+                        Err(e) => return Err(e),
+                    };
+
+                    let left = match self.stack_pop() {
+                        Ok(object) => object,
+                        Err(e) => return Err(e),
+                    };
+
+                    match (left, right) {
+                        (Object::Integer(left), Object::Integer(right)) => {
+                            let result = Object::Integer(
+                                crate::object_system::Integer {
+                                    value: left.value + right.value,
+                                }
+                            );
+
+                            match self.stack.push_constant(result) {
+                                Ok(_) => (),
+                                Err(e) => return Err(e),
+                            }
+                        },
+                        _ => return Err(String::from("Unsupported types for addition")),
+                    }
+                }
             }
         }
 
@@ -167,7 +208,7 @@ mod tests {
             VirtualMachineTest {
                 input: String::from("1 + 2"),
                 expected_stack: vec![
-                    Object::Integer(Integer { value: 2 }),
+                    Object::Integer(Integer { value: 3 }),
                 ],
             },
             VirtualMachineTest {

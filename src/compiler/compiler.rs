@@ -59,19 +59,25 @@ impl Compiler {
     fn compile_expression(&mut self, expression: &ast::Expression) -> Result<(), String> {
         match expression {
             ast::Expression::InfixExpression(infix) => {
-                let result = self.compile_expression(&infix.left);
-
-                match result {
+                let _ = match self.compile_expression(&infix.left) {
                     Ok(_) => (),
                     Err(e) => return Err(e),
-                }
+                };
 
-                let result = self.compile_expression(&infix.right);
-
-                match result {
+                let _ = match self.compile_expression(&infix.right) {
                     Ok(_) => (),
                     Err(e) => return Err(e),
-                }
+                };
+
+                let opcode = match infix.operator.as_str() {
+                    "+" => OpCode::OpAdd,
+                    _ => return Err(format!("Operator not supported: {}", infix.operator)),
+                };
+
+                let _ = match self.emit(opcode, vec![]) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
             },
             ast::Expression::IntegerLiteral(integer) => {
                 let integer_object = Object::Integer(Integer { value: integer.value });
@@ -220,6 +226,7 @@ mod test {
                 expected_instructions: vec![
                     make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
                     make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
                 ],
             }
         ];
