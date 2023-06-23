@@ -63,6 +63,23 @@ impl Compiler {
 
     fn compile_expression(&mut self, expression: &ast::Expression) -> Result<(), String> {
         match expression {
+            ast::Expression::PrefixExpression(prefix) => {
+                let _ = match self.compile_expression(&prefix.right) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+
+                let opcode = match prefix.operator.as_str() {
+                    "!" => OpCode::OpBang,
+                    "-" => OpCode::OpMinus,
+                    _ => return Err(format!("Operator not supported: {}", prefix.operator)),
+                };
+
+                let _ = match self.emit(opcode, vec![]) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+            },
             ast::Expression::InfixExpression(infix) => {
                 let _ = match self.compile_expression(&infix.left) {
                     Ok(_) => (),
@@ -294,6 +311,19 @@ mod test {
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ],
             },
+            CompilerTest {
+                input: String::from("-1"),
+                expected_constants: vec![
+                    Object::Integer(
+                        Integer {value: 1}
+                    )
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpMinus, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            }
         ];
         run_compiler_tests(input);
     }
@@ -389,6 +419,15 @@ mod test {
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ],
             },
+            CompilerTest {
+                input: String::from("!true"),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpTrue, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpBang, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            }
         ];
         run_compiler_tests(input);
     }

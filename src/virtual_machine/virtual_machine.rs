@@ -134,11 +134,75 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     };
                 },
+                OpCode::OpBang => {
+                    let _ = match self.run_bang_operator() {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    };
+                },
+                OpCode::OpMinus => {
+                    let _ = match self.run_minus_operator() {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    };
+                },
                 _ => return Err(format!("Opcode not supported: {:?}", opcode)),         
             }
         }
 
         return Ok(());
+    }
+
+    pub fn run_minus_operator(&mut self) -> Result<(), String> {
+        let operand = match self.stack.stack_pop() {
+            Ok(object) => object,
+            Err(e) => return Err(e),
+        };
+
+        if operand.object_type() != object_system::ObjectType::INTEGER {
+            return Err(String::from("Unsupported types"));
+        }
+
+        let operand = match operand {
+            Object::Integer(integer) => integer.value,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        match self.stack.push_constant(
+            Object::Integer(object_system::Integer { value: -operand })
+        ) {
+            Ok(_) => (),
+            Err(e) => return Err(e),
+        }
+
+        return Ok(())
+    }
+
+    pub fn run_bang_operator(&mut self) -> Result<(), String> {
+        let operand = match self.stack.stack_pop() {
+            Ok(object) => object,
+            Err(e) => return Err(e),
+        };
+
+        match operand {
+            object_system::Object::Boolean(boolean) => {
+                match self.stack.push_constant(
+                    Object::Boolean(object_system::Boolean { value: !boolean.value })
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            _ => {
+                match self.stack.push_constant(
+                    Object::Boolean(object_system::Boolean { value: false })
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+        }
+        return Ok(())
     }
 
     pub fn run_comparison(&mut self, opcode: OpCode) -> Result<(), String> {
@@ -453,30 +517,30 @@ mod tests {
                     Object::Integer(Integer { value: 60 }),
                 ],
             },
-            // VirtualMachineTest {
-            //     input: String::from("-5"),
-            //     expected_stack: vec![
-            //         Object::Integer(Integer { value: -5 }),
-            //     ],
-            // },
-            // VirtualMachineTest {
-            //     input: String::from("-10"),
-            //     expected_stack: vec![
-            //         Object::Integer(Integer { value: -10 }),
-            //     ],
-            // },
-            // VirtualMachineTest {
-            //     input: String::from("50 + 100 + 50"),
-            //     expected_stack: vec![
-            //         Object::Integer(Integer { value: 0 }),
-            //     ],
-            // },
-            // VirtualMachineTest {
-            //     input: String::from("(5 + 10 * 2 + 15 / 3) * 2 + -10"),
-            //     expected_stack: vec![
-            //         Object::Integer(Integer { value: 50 }),
-            //     ],
-            // },
+            VirtualMachineTest {
+                input: String::from("-5"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: -5 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("-10"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: -10 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("-50 + 100 + -50"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 0 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("(5 + 10 * 2 + 15 / 3) * 2 + -10"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 50 }),
+                ],
+            },
             VirtualMachineTest {
                 input: String::from("5 + 5 + 5 + 5 - 10"),
                 expected_stack: vec![
@@ -624,6 +688,42 @@ mod tests {
             },
             VirtualMachineTest {
                 input: String::from("(1 > 2) == false"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("!true"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("!false"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("!5"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("!!true"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("!!false"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("!!5"),
                 expected_stack: vec![
                     Object::Boolean(object_system::Boolean { value: true }),
                 ],
