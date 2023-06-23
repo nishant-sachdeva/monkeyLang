@@ -112,6 +112,22 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     }
                 },
+                OpCode::OpTrue => {
+                    match self.stack.push_constant(
+                        Object::Boolean(object_system::Boolean { value: true })
+                    ) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    }
+                },
+                OpCode::OpFalse => {
+                    match self.stack.push_constant(
+                        Object::Boolean(object_system::Boolean { value: false })
+                    ) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    }
+                },
                 _ => return Err(format!("Opcode not supported: {:?}", opcode)),         
             }
         }
@@ -180,6 +196,8 @@ impl VirtualMachine {
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use crate::{parser::Parser, interpreter::lexer::Lexer};
     use crate::object_system::{
         Object,
@@ -203,10 +221,28 @@ mod tests {
             Object::Integer(integer) => {
                 test_integer_object(integer.value, actual)
             },
+            Object::Boolean(boolean) => {
+                test_boolean_object(boolean.value, actual)
+            },
             _ => {
                 return Err(format!("Wrong object type. Expected: Integer Actual: {:?}", actual));
             }
         }
+    }
+
+    fn test_boolean_object(expected: bool, actual: Object) -> Result<(), String> {
+        match actual {
+            Object::Boolean(boolean) => {
+                if boolean.value != expected {
+                    return Err(format!("Wrong boolean value. Expected: {} Actual: {}", expected, boolean.value));
+                }
+            },
+            _ => {
+                return Err(format!("Wrong object type. Expected: Boolean Actual: {:?}", actual));
+            }
+        }
+
+        return Ok(());
     }
 
     fn test_integer_object(expected: i64, actual: Object) -> Result<(), String> {
@@ -364,8 +400,26 @@ mod tests {
                 ],
             },
         ];
-
         run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_boolean_expressions() {
+        let inputs = vec![
+            VirtualMachineTest {
+                input: String::from("true"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("false"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            }
+        ];
+        run_vm_tests(inputs);
     }
 
 }

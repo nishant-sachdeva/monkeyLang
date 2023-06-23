@@ -13,6 +13,8 @@ pub enum OpCode {
     OpMul,
     OpDiv,
     OpPop,
+    OpTrue,
+    OpFalse,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +67,20 @@ lazy_static! {
                     name: OpCode::OpPop,
                     operand_widths: vec![],
                 },
+            ),
+            (
+                OpCode::OpTrue,
+                OpCodeLayout {
+                    name: OpCode::OpTrue,
+                    operand_widths: vec![],
+                },
+            ),
+            (
+                OpCode::OpFalse,
+                OpCodeLayout {
+                    name: OpCode::OpFalse,
+                    operand_widths: vec![],
+                },
             )
         ])
     };
@@ -78,6 +94,8 @@ pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
         3 => Ok(OpCode::OpMul),
         4 => Ok(OpCode::OpDiv),
         5 => Ok(OpCode::OpPop),
+        6 => Ok(OpCode::OpTrue),
+        7 => Ok(OpCode::OpFalse),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }

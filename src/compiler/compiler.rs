@@ -98,6 +98,19 @@ impl Compiler {
                     Err(e) => return Err(e),
                 }
             },
+            ast::Expression::BooleanLiteral(boolean) => {
+                let opcode = match boolean.value {
+                    true => OpCode::OpTrue,
+                    false => OpCode::OpFalse,
+                };
+
+                let result = self.emit(opcode, vec![]);
+
+                match result {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
             _ => return Err(format!("Expression type not supported: {:?}", expression)),
         }
 
@@ -274,6 +287,29 @@ mod test {
                     make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
                     make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
                     make_bytecode(OpCode::OpDiv, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+        ];
+        run_compiler_tests(input);
+    }
+
+    #[test]
+    fn test_boolean_expressions() {
+        let input = vec![
+            CompilerTest {
+                input: String::from("true"),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpTrue, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+            CompilerTest {
+                input: String::from("false"),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpFalse, vec![]).unwrap(),
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ],
             },
