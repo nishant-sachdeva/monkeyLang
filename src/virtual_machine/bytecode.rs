@@ -9,6 +9,9 @@ pub type Instructions = Vec<Instruction>;
 pub enum OpCode {
     OpConstant,
     OpAdd,
+    OpSub,
+    OpMul,
+    OpDiv,
     OpPop,
 }
 
@@ -36,6 +39,27 @@ lazy_static! {
                 },
             ),
             (
+                OpCode::OpSub,
+                OpCodeLayout {
+                    name: OpCode::OpSub,
+                    operand_widths: vec![],
+                },
+            ),
+            (
+                OpCode::OpMul,
+                OpCodeLayout {
+                    name: OpCode::OpMul,
+                    operand_widths: vec![],
+                },
+            ),
+            (
+                OpCode::OpDiv,
+                OpCodeLayout {
+                    name: OpCode::OpDiv,
+                    operand_widths: vec![],
+                },
+            ),
+            (
                 OpCode::OpPop,
                 OpCodeLayout {
                     name: OpCode::OpPop,
@@ -50,7 +74,10 @@ pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
     match opcode {
         0 => Ok(OpCode::OpConstant),
         1 => Ok(OpCode::OpAdd),
-        2 => Ok(OpCode::OpPop),
+        2 => Ok(OpCode::OpSub),
+        3 => Ok(OpCode::OpMul),
+        4 => Ok(OpCode::OpDiv),
+        5 => Ok(OpCode::OpPop),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }
@@ -201,6 +228,7 @@ pub fn format_instruction(opcode: OpCode, operands: Vec<usize>) -> String {
         OpCode::OpConstant => format!("OpConstant {:?}", operands[0]),
         OpCode::OpAdd => format!("OpAdd"),
         OpCode::OpPop => format!("OpPop"),
+        _ => format!("Opcode {} not implemented", opcode as u8),
     }
 }
 
@@ -272,7 +300,7 @@ mod tests {
                 expected: String::from("0000 OpAdd\n0001 OpConstant 1\n0004 OpConstant 2\n"),
             },
             Test {
-                raw_assembly: "0100000100000202".to_string(),
+                raw_assembly: "0100000100000205".to_string(),
                 expected: String::from("0000 OpAdd\n0001 OpConstant 1\n0004 OpConstant 2\n0007 OpPop\n"),
             },
         ];

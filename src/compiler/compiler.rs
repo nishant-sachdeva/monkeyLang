@@ -76,6 +76,9 @@ impl Compiler {
 
                 let opcode = match infix.operator.as_str() {
                     "+" => OpCode::OpAdd,
+                    "-" => OpCode::OpSub,
+                    "*" => OpCode::OpMul,
+                    "/" => OpCode::OpDiv,
                     _ => return Err(format!("Operator not supported: {}", infix.operator)),
                 };
 
@@ -234,7 +237,46 @@ mod test {
                     make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ],
-            }
+            },
+            CompilerTest {
+                input: String::from("1 - 2"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpSub, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+            CompilerTest {
+                input: String::from("1 * 2"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpMul, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+            CompilerTest {
+                input: String::from("2/1"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 2}),
+                    Object::Integer(Integer {value: 1})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpDiv, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
         ];
 
         run_compiler_tests(input);

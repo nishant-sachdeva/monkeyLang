@@ -1,4 +1,4 @@
-use crate::interpreter::evaluate::object_system;
+use crate::interpreter::evaluate::object_system::{self, ObjectInterface};
 use crate::object_system::Object;
 use crate::compiler::compiler::RawAssembly;
 use crate::virtual_machine::bytecode::{
@@ -100,40 +100,78 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     }
                 },
-                OpCode::OpAdd => {
-                    let right = match self.stack_pop() {
-                        Ok(object) => object,
+                OpCode::OpAdd | OpCode::OpDiv | OpCode::OpMul | OpCode::OpSub => {
+                    let _ = match self.run_binary_operation(opcode) {
+                        Ok(_) => (),
                         Err(e) => return Err(e),
                     };
-
-                    let left = match self.stack_pop() {
-                        Ok(object) => object,
-                        Err(e) => return Err(e),
-                    };
-
-                    match (left, right) {
-                        (Object::Integer(left), Object::Integer(right)) => {
-                            let result = Object::Integer(
-                                crate::object_system::Integer {
-                                    value: left.value + right.value,
-                                }
-                            );
-
-                            match self.stack.push_constant(result) {
-                                Ok(_) => (),
-                                Err(e) => return Err(e),
-                            }
-                        },
-                        _ => return Err(String::from("Unsupported types for addition")),
-                    }
                 },
                 OpCode::OpPop => {
                     match self.stack.stack_pop() {
                         Ok(_) => (),
                         Err(e) => return Err(e),
                     }
-                },           
+                },
+                _ => return Err(format!("Opcode not supported: {:?}", opcode)),         
             }
+        }
+
+        return Ok(());
+    }
+
+    pub fn run_binary_operation(&mut self, opcode: OpCode) -> Result<(), String> {
+        let right = match self.stack.stack_pop() {
+            Ok(object) => object,
+            Err(e) => return Err(e),
+        };
+
+        let left = match self.stack.stack_pop() {
+            Ok(object) => object,
+            Err(e) => return Err(e),
+        };
+
+        match (left.object_type(), right.object_type()) {
+            (object_system::ObjectType::INTEGER, object_system::ObjectType::INTEGER) => {
+                match self.run_int_binary_operation(opcode, left, right) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            }
+            _ => return Err(String::from("Unsupported types")),
+        }
+
+        return Ok(());
+    }
+
+    pub fn run_int_binary_operation(&mut self, opcode: OpCode, left: object_system::Object, right: object_system::Object) -> Result<(), String> {
+        let left = match left {
+            Object::Integer(integer) => integer.value,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        let right = match right {
+            Object::Integer(integer) => integer.value,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        let result = match opcode {
+            OpCode::OpAdd => left + right,
+            OpCode::OpSub => left - right,
+            OpCode::OpMul => left * right,
+            OpCode::OpDiv => {
+                if right == 0 {
+                    return Err(String::from("Division by zero"));
+                }
+                left / right
+            }
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        let result_object = Object::Integer(object_system::Integer { value: result });
+
+        match self.stack.push_constant(result_object) {
+            Ok(_) => (),
+            Err(e) => return Err(e),
         }
 
         return Ok(());
@@ -239,6 +277,90 @@ mod tests {
                 input: String::from("2"),
                 expected_stack: vec![
                     Object::Integer(Integer { value: 2 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("1 - 2"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: -1 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("1 * 2"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 2 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("4 / 2"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 2 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("50 / 2 * 2 + 10 - 5"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 55 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("5 * (2 + 10)"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 60 }),
+                ],
+            },
+            // VirtualMachineTest {
+            //     input: String::from("-5"),
+            //     expected_stack: vec![
+            //         Object::Integer(Integer { value: -5 }),
+            //     ],
+            // },
+            // VirtualMachineTest {
+            //     input: String::from("-10"),
+            //     expected_stack: vec![
+            //         Object::Integer(Integer { value: -10 }),
+            //     ],
+            // },
+            // VirtualMachineTest {
+            //     input: String::from("50 + 100 + 50"),
+            //     expected_stack: vec![
+            //         Object::Integer(Integer { value: 0 }),
+            //     ],
+            // },
+            // VirtualMachineTest {
+            //     input: String::from("(5 + 10 * 2 + 15 / 3) * 2 + -10"),
+            //     expected_stack: vec![
+            //         Object::Integer(Integer { value: 50 }),
+            //     ],
+            // },
+            VirtualMachineTest {
+                input: String::from("5 + 5 + 5 + 5 - 10"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 10 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("2*2*2*2*2"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 32 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("5 * 2 + 10"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 20 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("5 + 2 * 10"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 25 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("5 * (2 + 10)"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 60 }),
                 ],
             },
         ];
