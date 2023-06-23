@@ -84,7 +84,7 @@ impl VirtualMachine {
         let mut stack_pointer = 0;
         while stack_pointer < self.assembly.instructions.len() {
             let opcode = opcode_lookup(
-                self.assembly.instructions[stack_pointer..stack_pointer+2].parse::<usize>().unwrap()
+                usize::from_str_radix(&self.assembly.instructions[stack_pointer..stack_pointer+2], 16).unwrap(),
             ).unwrap();
             stack_pointer += 2;
 
@@ -128,11 +128,119 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     }
                 },
+                OpCode::OpEqual | OpCode::OpNotEqual | OpCode::OpGreaterThan | OpCode::OpLessThan => {
+                    let _ = match self.run_comparison(opcode) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    };
+                },
                 _ => return Err(format!("Opcode not supported: {:?}", opcode)),         
             }
         }
 
         return Ok(());
+    }
+
+    pub fn run_comparison(&mut self, opcode: OpCode) -> Result<(), String> {
+        let right = match self.stack.stack_pop() {
+            Ok(object) => object,
+            Err(e) => return Err(e),
+        };
+
+        let left = match self.stack.stack_pop() {
+            Ok(object) => object,
+            Err(e) => return Err(e),
+        };
+
+        match (left.object_type(), right.object_type()) {
+            (object_system::ObjectType::INTEGER, object_system::ObjectType::INTEGER) => {
+                match self.run_int_comparison(opcode, left, right) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            }
+            (object_system::ObjectType::BOOLEAN, object_system::ObjectType::BOOLEAN) => {
+                match self.run_boolean_comparison(opcode, left, right) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            }
+            _ => return Err(String::from("Mismatched/UnSupported types")),
+        }
+
+        return Ok(());
+    }
+
+    pub fn run_boolean_comparison(&mut self, opcode: OpCode, left: object_system::Object, right: object_system::Object) -> Result<(), String> {
+        match opcode {
+            OpCode::OpEqual => {
+                match self.stack.push_constant(
+                    Object::Boolean(object_system::Boolean { value: left == right })
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            OpCode::OpNotEqual => {
+                match self.stack.push_constant(
+                    Object::Boolean(object_system::Boolean { value: left != right })
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            _ => return Err(String::from("Unsupported types")),
+        }
+        return Ok(())
+    }
+
+    pub fn run_int_comparison(&mut self, opcode: OpCode, left: object_system::Object, right: object_system::Object) -> Result<(), String> {
+        let left_value = match left {
+            Object::Integer(integer) => integer.value,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        let right_value = match right {
+            Object::Integer(integer) => integer.value,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        _ =  match opcode {
+            OpCode::OpEqual => {
+                match self.stack.push_constant(
+                    Object::Boolean(object_system::Boolean { value: left_value == right_value })
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            OpCode::OpNotEqual => {
+                match self.stack.push_constant(
+                    Object::Boolean(object_system::Boolean { value: left_value != right_value })
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            OpCode::OpGreaterThan => {
+                match self.stack.push_constant(
+                    Object::Boolean(object_system::Boolean { value: left_value > right_value })
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            OpCode::OpLessThan => {
+                match self.stack.push_constant(
+                    Object::Boolean(object_system::Boolean { value: left_value < right_value })
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            _ => return Err(String::from("Unsupported types")),
+        };
+        return Ok(())
     }
 
     pub fn run_binary_operation(&mut self, opcode: OpCode) -> Result<(), String> {
@@ -417,7 +525,109 @@ mod tests {
                 expected_stack: vec![
                     Object::Boolean(object_system::Boolean { value: false }),
                 ],
-            }
+            },
+            VirtualMachineTest {
+                input: String::from("1 < 2"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("1 > 2"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("1 < 1"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("1 > 1"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("1 == 1"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("1 != 1"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("1 == 2"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("1 != 2"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("true == true"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("false == false"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("true == false"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("true != false"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("false != true"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("(1 < 2) == true"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("(1 < 2) == false"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("(1 > 2) == true"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: false }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("(1 > 2) == false"),
+                expected_stack: vec![
+                    Object::Boolean(object_system::Boolean { value: true }),
+                ],
+            },
         ];
         run_vm_tests(inputs);
     }

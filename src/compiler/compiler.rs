@@ -79,6 +79,10 @@ impl Compiler {
                     "-" => OpCode::OpSub,
                     "*" => OpCode::OpMul,
                     "/" => OpCode::OpDiv,
+                    ">" => OpCode::OpGreaterThan,
+                    "<" => OpCode::OpLessThan,
+                    "==" => OpCode::OpEqual,
+                    "!=" => OpCode::OpNotEqual,
                     _ => return Err(format!("Operator not supported: {}", infix.operator)),
                 };
 
@@ -313,8 +317,79 @@ mod test {
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ],
             },
+            CompilerTest {
+                input: String::from("1 > 2"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpGreaterThan, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+            CompilerTest {
+                input: String::from("1 < 2"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpLessThan, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+            CompilerTest {
+                input: String::from("1 == 2"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpEqual, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+            CompilerTest {
+                input: String::from("1 != 2"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpNotEqual, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+            CompilerTest {
+                input: String::from("true == false"),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpTrue, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpFalse, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpEqual, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+            CompilerTest {
+                input: String::from("true != false"),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpTrue, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpFalse, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpNotEqual, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
         ];
-
         run_compiler_tests(input);
     }
 }
