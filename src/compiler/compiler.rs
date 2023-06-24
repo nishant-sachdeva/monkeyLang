@@ -1,13 +1,16 @@
 use crate::{
     interpreter::evaluate::object_system::*,
     virtual_machine::bytecode::{
-        Instructions,
         OpCode,
         make_bytecode,
-        get_raw_assembly,
+        get_raw_instruction,
+        Instruction,
+        opcode_lookup,
     },
     interpreter::ast,
 };
+
+pub type InstructionPosition = usize;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawAssembly {
@@ -15,21 +18,47 @@ pub struct RawAssembly {
     pub constants: Vec<Object>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmittedInstruction {
+    pub opcode: Option<OpCode>,
+    pub position: usize,
+}
+
 pub struct Compiler {
-    pub instructions: Instructions,
-    pub constants: Vec<Object>,
+    pub raw_assembly: RawAssembly,
+    pub last_instruction: EmittedInstruction,
+    pub previous_instruction: EmittedInstruction,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
-            instructions: Vec::new(),
-            constants: Vec::new(),
+            raw_assembly: RawAssembly { instructions: String::new(), constants: Vec::new() },
+            last_instruction: EmittedInstruction {
+                opcode: None,
+                position: 0,
+            },
+            previous_instruction: EmittedInstruction {
+                opcode: None,
+                position: 0,
+            },
         }
     }
 
     pub fn compile(&mut self, _program: &mut ast::Program) -> Result<(), String> {
         for statement in _program.statements.iter() {
+            let result = self.compile_statement(statement);
+
+            match result {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
+        }
+        return Ok(());
+    }
+
+    pub fn compile_block(&mut self, block: &ast::BlockStatement) -> Result<(), String> {
+        for statement in block.statements.iter() {
             let result = self.compile_statement(statement);
 
             match result {
@@ -63,6 +92,30 @@ impl Compiler {
 
     fn compile_expression(&mut self, expression: &ast::Expression) -> Result<(), String> {
         match expression {
+            ast::Expression::IfExpression(if_expr) => {
+                let _ = match self.compile_expression(&if_expr.condition) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+
+                // emit an OpJumpNotTruthy with a bogus value
+                let jump_not_truthy_position = match self.emit(OpCode::OpJumpNotTruthy, vec![9999]) {
+                    Ok(pos) => pos,
+                    Err(e) => return Err(e),
+                };
+
+                let _ = match self.compile_block(&if_expr.consequence) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+
+                if self.last_instruction.opcode == Some(OpCode::OpPop) {
+                    self.remove_last_pop();
+                }
+
+                let after_consequence_position = self.raw_assembly.instructions.len()/2;
+                _ = self.change_operand(jump_not_truthy_position, after_consequence_position)
+            }
             ast::Expression::PrefixExpression(prefix) => {
                 let _ = match self.compile_expression(&prefix.right) {
                     Ok(_) => (),
@@ -139,29 +192,81 @@ impl Compiler {
     }
 
     fn add_constant(&mut self, object: Object) -> usize {
-        self.constants.push(object);
-        return self.constants.len() - 1;
+        self.raw_assembly.constants.push(object);
+        return self.raw_assembly.constants.len() - 1;
     }
 
-    fn emit(&mut self, opcode: OpCode, operands: Vec<usize>) -> Result<(), String> {
-        let instruction = match make_bytecode(opcode, operands) {
+    fn emit(&mut self, opcode: OpCode, operands: Vec<usize>) -> Result<InstructionPosition, String> {
+        let position_new_instruction = self.raw_assembly.instructions.len();
+        _ = self.add_instruction(
+            match make_bytecode(opcode, operands) {
+                Ok(instruction) => instruction,
+                Err(e) => return Err(e),
+            }
+        );
+
+        self.set_last_instruction(opcode, position_new_instruction);
+
+        return Ok(position_new_instruction);
+    }
+
+    pub fn set_last_instruction(&mut self, opcode: OpCode, position: usize) {
+        self.previous_instruction = self.last_instruction.clone();
+
+        let last_instruction = EmittedInstruction {
+            opcode: Some(opcode),
+            position: position,
+        };
+
+        self.last_instruction = last_instruction;
+    }
+
+    pub fn add_instruction(&mut self, instruction: Instruction) -> Result<(), String> {
+        self.raw_assembly.instructions += &match get_raw_instruction(instruction) {
+            Ok(raw_instruction) => raw_instruction,
+            Err(e) => return Err(e),
+        };
+        
+        return Ok(())
+    }
+
+    pub fn change_operand(&mut self, position: usize, operand: usize) -> Result<(), String> {
+        let instruction = match make_bytecode(
+            match opcode_lookup(
+                match usize::from_str_radix(&self.raw_assembly.instructions[position..position+2], 16) {
+                    Ok(opcode) => opcode,
+                    Err(e) => return Err(e.to_string()),
+                }
+            ) {
+                Ok(opcode) => opcode,
+                Err(e) => return Err(e)
+            },
+            vec![operand],
+        ) {
             Ok(instruction) => instruction,
             Err(e) => return Err(e),
         };
 
-        self.instructions.push(instruction);
+        self.replace_instruction(
+            position,
+            get_raw_instruction(instruction).unwrap().as_str()
+        );
 
-        return Ok(());
+        return Ok(())
+    }
+
+    pub fn replace_instruction(&mut self, pos: usize, new_instruction: &str) {
+        self.raw_assembly.instructions.replace_range(pos..pos + new_instruction.len(), new_instruction);
+    }
+
+    pub fn remove_last_pop(&mut self) {
+        let last_instruction_position = self.last_instruction.position;
+        self.raw_assembly.instructions = self.raw_assembly.instructions[..last_instruction_position].to_string();
+        self.last_instruction = self.previous_instruction.clone();
     }
 
     pub fn raw_assembly(&mut self) -> Result<RawAssembly, String> {
-        return Ok(RawAssembly {
-            instructions: match get_raw_assembly(self.instructions.clone()) {
-                Ok(instructions) => instructions,
-                Err(e) => return Err(e),
-            },
-            constants: self.constants.clone(),
-        })
+        return Ok(self.raw_assembly.clone())
     }
 }
 
@@ -170,7 +275,7 @@ mod test {
     use core::panic;
     use std::vec;
     use crate::{parser::Parser, interpreter::lexer::Lexer};
-    use crate::virtual_machine::bytecode::{make_bytecode, OpCode};
+    use crate::virtual_machine::bytecode::{make_bytecode, OpCode, Instructions, get_raw_assembly, format_raw_assembly};
 
     use super::*;
 
@@ -180,27 +285,13 @@ mod test {
         expected_instructions: Instructions,
     }
 
-    pub fn test_instructions(expected: Instructions, actual: Instructions) -> Result<(), String> {
-        if expected.len() != actual.len() {
-            return Err(format!("Wrong instructions length.\nExpected: {}\nActual: {}", expected.len(), actual.len()));
+    pub fn test_instructions(expected: String, actual: String) -> Result<(), String> {
+        if expected != actual {
+            return Err(
+                format!("Wrong instructions.\nExpected: {}\nActual: {}", 
+                format_raw_assembly(expected).unwrap(), format_raw_assembly(actual).unwrap()
+            ));
         }
-
-        for (i, expected_instruction) in expected.iter().enumerate() {
-            let actual_instruction = actual.get(i).unwrap();
-
-            if expected_instruction.len() != actual_instruction.len() {
-                return Err(format!("Wrong instruction length at {}.\nExpected: {}\nActual: {}", i, expected_instruction.len(), actual_instruction.len()));
-            }
-
-            for (j, expected_byte) in expected_instruction.iter().enumerate() {
-                let actual_byte = actual_instruction.get(j).unwrap();
-
-                if expected_byte != actual_byte {
-                    return Err(format!("Wrong byte at {}:{}.\nExpected: {}\nActual: {}", i, j, expected_byte, actual_byte));
-                }
-            }
-        }
-
         return Ok(());
     }
 
@@ -244,12 +335,15 @@ mod test {
                 Err(e) => panic!("{e}"),
             };
 
-            _ = match test_instructions(test.expected_instructions, compiler.instructions) {
+            _ = match test_instructions(
+                get_raw_assembly(test.expected_instructions).unwrap(),
+                compiler.raw_assembly.instructions
+            ) {
                 Ok(_) => (),
                 Err(e) => panic!("{e}"),
             };
 
-            _ = match test_constants(test.expected_constants, compiler.constants) {
+            _ = match test_constants(test.expected_constants, compiler.raw_assembly.constants) {
                 Ok(_) => (),
                 Err(e) => panic!("{e}"),
             };
@@ -430,5 +524,27 @@ mod test {
             }
         ];
         run_compiler_tests(input);
+    }
+
+    #[test]
+    fn test_conditionals() {
+        let inputs = vec![
+            CompilerTest {
+                input: String::from("if (true) { 10 }; 3333;"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 10}),
+                    Object::Integer(Integer {value: 3333})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpTrue, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpJumpNotTruthy, vec![7]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            }
+        ];
+        run_compiler_tests(inputs);
     }
 }

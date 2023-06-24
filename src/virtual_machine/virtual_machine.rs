@@ -81,17 +81,17 @@ impl VirtualMachine {
     }
 
     pub fn run(&mut self) -> Result<(), String> {
-        let mut stack_pointer = 0;
-        while stack_pointer < self.assembly.instructions.len() {
+        let mut instruction_pointer = 0;
+        while instruction_pointer < self.assembly.instructions.len() {
             let opcode = opcode_lookup(
-                usize::from_str_radix(&self.assembly.instructions[stack_pointer..stack_pointer+2], 16).unwrap(),
+                usize::from_str_radix(&self.assembly.instructions[instruction_pointer..instruction_pointer+2], 16).unwrap(),
             ).unwrap();
-            stack_pointer += 2;
+            instruction_pointer += 2;
 
             match opcode {
                 OpCode::OpConstant => {
-                    let const_index = self.assembly.instructions[stack_pointer..stack_pointer+4].parse::<usize>().unwrap();
-                    stack_pointer += 4;
+                    let const_index = self.assembly.instructions[instruction_pointer..instruction_pointer+4].parse::<usize>().unwrap();
+                    instruction_pointer += 4;
 
                     match self.stack.push_constant(
                         self.assembly.constants[const_index].clone()
@@ -731,5 +731,4 @@ mod tests {
         ];
         run_vm_tests(inputs);
     }
-
 }

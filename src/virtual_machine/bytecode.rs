@@ -21,6 +21,8 @@ pub enum OpCode {
     OpLessThan,
     OpMinus,
     OpBang,
+    OpJumpNotTruthy,
+    OpJump,
 }
 
 #[derive(Debug, Clone)]
@@ -129,6 +131,20 @@ lazy_static! {
                     name: OpCode::OpBang,
                     operand_widths: vec![]
                 },
+            ),
+            (
+                OpCode::OpJumpNotTruthy,
+                OpCodeLayout {
+                    name: OpCode::OpJumpNotTruthy,
+                    operand_widths: vec![2]
+                }
+            ),
+            (
+                OpCode::OpJump,
+                OpCodeLayout {
+                    name: OpCode::OpJump,
+                    operand_widths: vec![2]
+                }
             )
         ])
     };
@@ -150,6 +166,8 @@ pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
         11 => Ok(OpCode::OpLessThan),
         12 => Ok(OpCode::OpMinus),
         13 => Ok(OpCode::OpBang),
+        14 => Ok(OpCode::OpJumpNotTruthy),
+        15 => Ok(OpCode::OpJump),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }
@@ -216,30 +234,37 @@ pub fn make_bytecode(opcode_name: OpCode, operands: Vec<usize>) -> Result<Instru
     Ok(instruction) 
 }
 
+pub fn get_raw_instruction(instruction: Instruction) -> Result<String, String> {
+    return  Ok(format!(
+        "{}",
+        instruction
+            .iter()
+            .map(|byte| format!("{:02X}", byte)) // format as hexadecimals
+            .collect::<String>()
+    ));
+}
+
 pub fn get_raw_assembly(instructions: Instructions) -> Result<String, String> {
     let mut bytecode = String::new();
     for instruction in instructions {
-        bytecode = bytecode + &format!(
-            "{}",
-            instruction
-                .iter()
-                .map(|byte| format!("{:02X}", byte)) // format as hexadecimals
-                .collect::<String>()
-        );
+        bytecode = bytecode + &match get_raw_instruction(instruction) {
+            Ok(raw_instruction) => raw_instruction,
+            Err(e) => return Err(e)
+        }
     }
     Ok(bytecode)
 }
 
 pub fn format_raw_assembly(raw_assembly: String) -> Result<String, String> {
-    println!("bytecode: {:?}", raw_assembly);
+    // println!("bytecode: {:?}", raw_assembly);
     let mut result = String::new();
     let mut offset = 0;
 
     while offset < raw_assembly.len() {
         let opcode = opcode_lookup(
-            raw_assembly[offset..(offset+2)].parse::<usize>().unwrap()
+            usize::from_str_radix(&raw_assembly[offset..(offset+2)], 16).unwrap()
         ).unwrap();
-        println!("opcode: {:?}", opcode);
+        // println!("opcode: {:?}", opcode);
 
         // get instruction operands
         let (operands, bytes_read) = read_operands(opcode, &raw_assembly[(offset+2)..]).unwrap();
@@ -255,8 +280,8 @@ pub fn format_raw_assembly(raw_assembly: String) -> Result<String, String> {
 }
 
 pub fn read_operands(opcode: OpCode, operands: &str) -> Result<(Vec<usize>, usize), String> {
-    println!("opcode: {:?}", opcode);
-    println!("operands: {:?}", operands);
+    // println!("opcode: {:?}", opcode);
+    // println!("operands: {:?}", operands);
 
     // let operands = operands.as_bytes();
     // println!("operands: {:?}", operands);
@@ -300,6 +325,16 @@ pub fn format_instruction(opcode: OpCode, operands: Vec<usize>) -> String {
         OpCode::OpConstant => format!("OpConstant {:?}", operands[0]),
         OpCode::OpAdd => format!("OpAdd"),
         OpCode::OpPop => format!("OpPop"),
+        OpCode::OpTrue => format!("OpTrue"),
+        OpCode::OpFalse => format!("OpFalse"),
+        OpCode::OpEqual => format!("OpEqual"),
+        OpCode::OpNotEqual => format!("OpNotEqual"),
+        OpCode::OpGreaterThan => format!("OpGreaterThan"),
+        OpCode::OpLessThan => format!("OpLessThan"),
+        OpCode::OpMinus => format!("OpMinus"),
+        OpCode::OpBang => format!("OpBang"),
+        OpCode::OpJumpNotTruthy => format!("OpJumpNotTruthy {:?}", operands[0]),
+        OpCode::OpJump => format!("OpJump {:?}", operands[0]),
         _ => format!("Opcode {} not implemented", opcode as u8),
     }
 }
