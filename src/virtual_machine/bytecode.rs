@@ -24,6 +24,8 @@ pub enum OpCode {
     OpJumpNotTruthy,
     OpJump,
     OpNull,
+    OpSetGlobal,
+    OpGetGlobal,
 }
 
 #[derive(Debug, Clone)]
@@ -152,6 +154,20 @@ lazy_static! {
                 OpCodeLayout {
                     name: OpCode::OpNull,
                     operand_widths: vec![]
+                }
+            ),
+            (
+                OpCode::OpSetGlobal,
+                OpCodeLayout {
+                    name: OpCode::OpSetGlobal,
+                    operand_widths: vec![2]
+                }
+            ),
+            (
+                OpCode::OpGetGlobal,
+                OpCodeLayout {
+                    name: OpCode::OpGetGlobal,
+                    operand_widths: vec![2]
                 }
             )
         ])

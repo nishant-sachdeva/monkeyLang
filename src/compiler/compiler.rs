@@ -84,6 +84,12 @@ impl Compiler {
                     Err(e) => return Err(e),
                 };
             },
+            ast::Statement::LetStatement(let_statement) => {
+                let _ = match self.compile_expression(&let_statement.value) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e)
+                };
+            }
             _ => return Err(format!("Statement type not supported: {:?}", statement)),
         }
 
@@ -586,6 +592,53 @@ mod test {
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ],
             }
+        ];
+        run_compiler_tests(inputs);
+    }
+
+    #[test]
+    fn test_global_let_statements() {
+        let inputs = vec![
+            CompilerTest {
+                input: String::from("let one = 1; let two = 2;"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpSetGlobal, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpSetGlobal, vec![1]).unwrap(),
+
+                ]
+            },
+            CompilerTest {
+                input: String::from("let one = 1; one;"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpSetGlobal, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpGetGlobal, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            },
+            CompilerTest {
+                input: String::from("let one = 1; let two = one; two;"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpSetGlobal, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpGetGlobal, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpSetGlobal, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpGetGlobal, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            },
         ];
         run_compiler_tests(inputs);
     }
