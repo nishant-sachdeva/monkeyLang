@@ -113,15 +113,15 @@ impl Compiler {
                     self.remove_last_pop();
                 }
 
+                let jump_position = match self.emit(OpCode::OpJump, vec![9999]) {
+                    Ok(pos) => pos,
+                    Err(e) => return Err(e),
+                };
+
+                let after_consequence_position = self.raw_assembly.instructions.len()/2;
+                _ = self.change_operand(jump_not_truthy_position, after_consequence_position);
+
                 if if_expr.alternative.is_some() {
-                    let jump_position = match self.emit(OpCode::OpJump, vec![9999]) {
-                        Ok(pos) => pos,
-                        Err(e) => return Err(e),
-                    };
-
-                    let after_consequence_position = self.raw_assembly.instructions.len()/2;
-                    _ = self.change_operand(jump_not_truthy_position, after_consequence_position);
-
                     let _ = match self.compile_block(if_expr.alternative.as_ref().unwrap()) {
                         Ok(_) => (),
                         Err(e) => return Err(e),
@@ -130,13 +130,12 @@ impl Compiler {
                     if self.last_instruction.opcode == Some(OpCode::OpPop) {
                         self.remove_last_pop();
                     }
-
-                    let after_alternative_position = self.raw_assembly.instructions.len()/2;
-                    _ = self.change_operand(jump_position, after_alternative_position);
                 } else {
-                    let after_consequence_position = self.raw_assembly.instructions.len()/2;
-                    _ = self.change_operand(jump_not_truthy_position, after_consequence_position);
+                    let _ = self.emit(OpCode::OpNull, vec![]);
                 }
+
+                let after_alternative_position = self.raw_assembly.instructions.len()/2;
+                _ = self.change_operand(jump_position, after_alternative_position);
                 
             }
             ast::Expression::PrefixExpression(prefix) => {
@@ -560,8 +559,10 @@ mod test {
                 ],
                 expected_instructions: vec![
                     make_bytecode(OpCode::OpTrue, vec![]).unwrap(),
-                    make_bytecode(OpCode::OpJumpNotTruthy, vec![7]).unwrap(),
+                    make_bytecode(OpCode::OpJumpNotTruthy, vec![10]).unwrap(),
                     make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpJump, vec![11]).unwrap(),
+                    make_bytecode(OpCode::OpNull, vec![]).unwrap(),
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                     make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),

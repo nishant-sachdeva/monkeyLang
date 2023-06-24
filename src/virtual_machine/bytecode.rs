@@ -23,6 +23,7 @@ pub enum OpCode {
     OpBang,
     OpJumpNotTruthy,
     OpJump,
+    OpNull,
 }
 
 #[derive(Debug, Clone)]
@@ -145,6 +146,13 @@ lazy_static! {
                     name: OpCode::OpJump,
                     operand_widths: vec![2]
                 }
+            ),
+            (
+                OpCode::OpNull,
+                OpCodeLayout {
+                    name: OpCode::OpNull,
+                    operand_widths: vec![]
+                }
             )
         ])
     };
@@ -168,6 +176,7 @@ pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
         13 => Ok(OpCode::OpBang),
         14 => Ok(OpCode::OpJumpNotTruthy),
         15 => Ok(OpCode::OpJump),
+        16 => Ok(OpCode::OpNull),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }
@@ -335,6 +344,7 @@ pub fn format_instruction(opcode: OpCode, operands: Vec<usize>) -> String {
         OpCode::OpBang => format!("OpBang"),
         OpCode::OpJumpNotTruthy => format!("OpJumpNotTruthy {:?}", operands[0]),
         OpCode::OpJump => format!("OpJump {:?}", operands[0]),
+        OpCode::OpNull => format!("OpNull"),
         _ => format!("Opcode {} not implemented", opcode as u8),
     }
 }

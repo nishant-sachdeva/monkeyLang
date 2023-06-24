@@ -146,6 +146,42 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     };
                 },
+                OpCode::OpJump => {
+                    let jump_position = usize::from_str_radix(
+                        &self.assembly.instructions[instruction_pointer..instruction_pointer+4],
+                        16
+                    ).unwrap();
+                    instruction_pointer = jump_position*2;
+                },
+                OpCode::OpJumpNotTruthy => {
+                    let jump_position = usize::from_str_radix(
+                        &self.assembly.instructions[instruction_pointer..instruction_pointer+4],
+                        16
+                    ).unwrap();
+                    instruction_pointer += 4;
+
+                    let condition = match self.stack.stack_pop() {
+                        Ok(object) => object,
+                        Err(e) => return Err(e),
+                    };
+
+                    match condition {
+                        object_system::Object::Boolean(boolean) => {
+                            if !boolean.value {
+                                instruction_pointer = jump_position*2;
+                            }
+                        },
+                        _ => () // defaults to True => No Jump Required
+                    }
+                },
+                OpCode::OpNull => {
+                    match self.stack.push_constant(
+                        Object::Null
+                    ) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    }
+                },
                 _ => return Err(format!("Opcode not supported: {:?}", opcode)),         
             }
         }
@@ -396,10 +432,24 @@ mod tests {
             Object::Boolean(boolean) => {
                 test_boolean_object(boolean.value, actual)
             },
+            Object::Null => {
+                test_null_object(actual)
+            },
             _ => {
                 return Err(format!("Wrong object type. Expected: Integer Actual: {:?}", actual));
             }
         }
+    }
+
+    fn test_null_object(actual: Object) -> Result<(), String> {
+        match actual {
+            Object::Null => (),
+            _ => {
+                return Err(format!("Wrong object type. Expected: Null Actual: {:?}", actual));
+            }
+        }
+
+        return Ok(());
     }
 
     fn test_boolean_object(expected: bool, actual: Object) -> Result<(), String> {
@@ -728,6 +778,67 @@ mod tests {
                     Object::Boolean(object_system::Boolean { value: true }),
                 ],
             },
+        ];
+        run_vm_tests(inputs);
+    }
+
+    #[test]
+    fn test_conditionals() {
+        let inputs = vec![
+            VirtualMachineTest {
+                input: String::from("if (true) { 10 }"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 10 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("if (true) { 10 } else { 20 }"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 10 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("if (false) { 10 } else { 20 }"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 20 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("if (1) { 10 }"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 10 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("if (1 < 2) { 10 }"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 10 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("if (1 < 2) { 10 } else { 20 }"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 10 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("if (1 > 2) { 10 } else { 20 }"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 20 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("if (1 > 2) { 10 }"),
+                expected_stack: vec![
+                    Object::Null,
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("if (false) { 10 }"),
+                expected_stack: vec![
+                    Object::Null,
+                ],
+            }
         ];
         run_vm_tests(inputs);
     }
