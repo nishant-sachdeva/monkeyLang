@@ -1,11 +1,14 @@
 use crate::{
-    interpreter::evaluate::object_system::*,
-    virtual_machine::bytecode::{
-        OpCode,
-        make_bytecode,
-        get_raw_instruction,
-        Instruction,
-        opcode_lookup,
+    interpreter::{evaluate::object_system::*},
+    virtual_machine::{
+        bytecode::{
+            OpCode,
+            make_bytecode,
+            get_raw_instruction,
+            Instruction,
+            opcode_lookup,
+        },
+        symbol_table::SymbolTable,
     },
     interpreter::ast,
 };
@@ -28,6 +31,7 @@ pub struct Compiler {
     pub raw_assembly: RawAssembly,
     pub last_instruction: EmittedInstruction,
     pub previous_instruction: EmittedInstruction,
+    pub symbol_table: SymbolTable,
 }
 
 impl Compiler {
@@ -42,6 +46,7 @@ impl Compiler {
                 opcode: None,
                 position: 0,
             },
+            symbol_table: SymbolTable::new(),
         }
     }
 
@@ -89,6 +94,12 @@ impl Compiler {
                     Ok(_) => (),
                     Err(e) => return Err(e)
                 };
+
+                let symbol = match self.symbol_table.define(let_statement.name.value.clone()) {
+                    Ok(symbol) => symbol,
+                    Err(e) => return Err(e),
+                };
+                let _ = self.emit(OpCode::OpSetGlobal, vec![symbol.index as usize]);
             }
             _ => return Err(format!("Statement type not supported: {:?}", statement)),
         }
@@ -98,6 +109,17 @@ impl Compiler {
 
     fn compile_expression(&mut self, expression: &ast::Expression) -> Result<(), String> {
         match expression {
+            ast::Expression::Identifier(identifier) => {
+                let symbol = match self.symbol_table.resolve(identifier.value.clone()) {
+                    Ok(symbol) => symbol,
+                    Err(e) => return Err(e),
+                };
+
+                let _ = match self.emit(OpCode::OpGetGlobal, vec![symbol.index as usize]) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+            }
             ast::Expression::IfExpression(if_expr) => {
                 let _ = match self.compile_expression(&if_expr.condition) {
                     Ok(_) => (),

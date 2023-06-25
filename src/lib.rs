@@ -13,7 +13,7 @@ use interpreter::{
     lexer,
 };
 
-use compiler::compiler::Compiler;
+use compiler::compiler::{Compiler};
 use virtual_machine::virtual_machine::VirtualMachine;
 
 use std::fs;
@@ -45,7 +45,9 @@ fn run_code(input: &str, env: Option<&mut environment::Environment>) -> object_s
     result
 }
 
-pub fn compile_and_run(input: &str) -> object_system::Object {
+pub fn compile_and_run(
+    input: &str,
+) -> object_system::Object {
     let lexer = lexer::Lexer::new(input.to_string());
     let mut parser = parser::Parser::new(lexer);
 
@@ -109,21 +111,23 @@ pub fn compile_and_run(input: &str) -> object_system::Object {
 }
 
 pub fn start_compiler_repl() {
+    let mut input = String::new();
     loop {
         // read input
         println!(">>");
-        let mut input = String::new();
-        match std::io::stdin().read_line(&mut input) {
+        let mut command = String::new();
+        match std::io::stdin().read_line(&mut command) {
             Ok(_) => {},
-            Err(e) => println!("Error reading input: {}", e),
+            Err(e) => println!("Error reading command: {}", e),
         }
 
-        // if input is "quit", break
-        if input.trim() == "quit" {
+        // if command is "quit", break
+        if command.trim() == "quit" {
             break;
         }
 
-        // run code
+        input = input + &command;
+
         let result = compile_and_run(&input);
 
         // print result

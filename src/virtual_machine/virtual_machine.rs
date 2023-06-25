@@ -7,6 +7,7 @@ use crate::virtual_machine::bytecode::{
 };
 
 pub const STACK_SIZE: usize = 2048;
+pub const GLOBALS_SIZE: usize = 65536;
 
 pub struct VmStack {
     pub stack: Vec<Object>,
@@ -59,8 +60,23 @@ impl VmStack {
     }
 }
 
+pub struct VmGlobals {
+    pub store: Vec<Object>,
+    pub number_of_definitions: usize,
+}
+
+impl VmGlobals {
+    pub fn new() -> Self {
+        VmGlobals {
+            store: vec![object_system::Object::Null; GLOBALS_SIZE],
+            number_of_definitions: 0,
+        }
+    }
+}
+
 pub struct VirtualMachine {
     pub stack: VmStack,
+    pub globals: VmGlobals,
     pub assembly: RawAssembly,
 }
 
@@ -68,6 +84,7 @@ impl VirtualMachine {
     pub fn new(assembly: RawAssembly) -> Self {
         VirtualMachine {
             stack: VmStack::new(),
+            globals: VmGlobals::new(),
             assembly,
         }
     }
@@ -89,6 +106,27 @@ impl VirtualMachine {
             instruction_pointer += 2;
 
             match opcode {
+                OpCode::OpSetGlobal => {
+                    let global_index = self.assembly.instructions[instruction_pointer..instruction_pointer+4].parse::<usize>().unwrap();
+                    instruction_pointer += 4;
+
+                    self.globals.store[global_index] = match self.stack.stack_pop() {
+                        Ok(object) => object,
+                        Err(e) => return Err(e),
+                    };
+                    self.globals.number_of_definitions += 1;
+                }
+                OpCode::OpGetGlobal => {
+                    let global_index = self.assembly.instructions[instruction_pointer..instruction_pointer+4].parse::<usize>().unwrap();
+                    instruction_pointer += 4;
+
+                    match self.stack.push_constant(
+                        self.globals.store[global_index].clone()
+                    ) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    }
+                }
                 OpCode::OpConstant => {
                     let const_index = self.assembly.instructions[instruction_pointer..instruction_pointer+4].parse::<usize>().unwrap();
                     instruction_pointer += 4;
@@ -182,7 +220,6 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     }
                 },
-                _ => return Err(format!("Opcode not supported: {:?}", opcode)),         
             }
         }
 
@@ -837,6 +874,31 @@ mod tests {
                 input: String::from("if (false) { 10 }"),
                 expected_stack: vec![
                     Object::Null,
+                ],
+            }
+        ];
+        run_vm_tests(inputs);
+    }
+
+    #[test]
+    fn test_global_let_statements() {
+        let inputs = vec![
+            VirtualMachineTest {
+                input: String::from("let one = 1; one;"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 1 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("let one = 1; let two = 2; one + two;"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 3 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("let one = 1; let two = one + one; one + two;"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 3 }),
                 ],
             }
         ];

@@ -193,6 +193,8 @@ pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
         14 => Ok(OpCode::OpJumpNotTruthy),
         15 => Ok(OpCode::OpJump),
         16 => Ok(OpCode::OpNull),
+        17 => Ok(OpCode::OpSetGlobal),
+        18 => Ok(OpCode::OpGetGlobal),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }
