@@ -109,6 +109,24 @@ impl Compiler {
 
     fn compile_expression(&mut self, expression: &ast::Expression) -> Result<(), String> {
         match expression {
+            ast::Expression::ArrayLiteral(array) => {
+                for element in array.elements.iter() {
+                    let _ = match self.compile_expression(element) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    };
+
+                    // if last instruction is OpPop, remove it
+                    if self.last_instruction.opcode == Some(OpCode::OpPop) {
+                        self.remove_last_pop();
+                    }
+                }
+
+                let _ = match self.emit(OpCode::OpArray, vec![array.elements.len()]) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+            }
             ast::Expression::StringLiteral(string_literal) => {
                 let string_value = string_literal.value.clone();
                 let string_object = Object::StringObject(StringObject { value: string_value });
@@ -695,6 +713,60 @@ mod test {
                     make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
                     make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
                     make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            }
+        ];
+        run_compiler_tests(inputs);
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let inputs = vec![
+            CompilerTest {
+                input: String::from("[]"),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpArray, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            },
+            CompilerTest {
+                input: String::from("[1,2,3]"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2}),
+                    Object::Integer(Integer {value: 3}),
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![2]).unwrap(),
+                    make_bytecode(OpCode::OpArray, vec![3]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            },
+            CompilerTest {
+                input: String::from("[1+2,3-4,5*6]"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2}),
+                    Object::Integer(Integer {value: 3}),
+                    Object::Integer(Integer {value: 4}),
+                    Object::Integer(Integer {value: 5}),
+                    Object::Integer(Integer {value: 6}),
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![2]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![3]).unwrap(),
+                    make_bytecode(OpCode::OpSub, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![4]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![5]).unwrap(),
+                    make_bytecode(OpCode::OpMul, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpArray, vec![3]).unwrap(),
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ]
             }

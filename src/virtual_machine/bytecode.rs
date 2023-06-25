@@ -26,6 +26,7 @@ pub enum OpCode {
     OpNull,
     OpSetGlobal,
     OpGetGlobal,
+    OpArray,
 }
 
 #[derive(Debug, Clone)]
@@ -169,6 +170,13 @@ lazy_static! {
                     name: OpCode::OpGetGlobal,
                     operand_widths: vec![2]
                 }
+            ),
+            (
+                OpCode::OpArray,
+                OpCodeLayout {
+                    name: OpCode::OpArray,
+                    operand_widths: vec![2]
+                }
             )
         ])
     };
@@ -195,6 +203,7 @@ pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
         16 => Ok(OpCode::OpNull),
         17 => Ok(OpCode::OpSetGlobal),
         18 => Ok(OpCode::OpGetGlobal),
+        19 => Ok(OpCode::OpArray),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }

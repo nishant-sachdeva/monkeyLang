@@ -106,6 +106,31 @@ impl VirtualMachine {
             instruction_pointer += 2;
 
             match opcode {
+                OpCode::OpArray => {
+                    let number_of_elements = usize::from_str_radix(
+                        &self.assembly.instructions[instruction_pointer..instruction_pointer+4],
+                        16
+                    ).unwrap();
+                    instruction_pointer += 4;
+
+                    let mut array_elements = Vec::new();
+                    for _ in 0..number_of_elements {
+                        let element = match self.stack.stack_pop() {
+                            Ok(object) => object,
+                            Err(e) => return Err(e),
+                        };
+                        array_elements.push(element);
+                    }
+
+                    array_elements.reverse();
+
+                    match self.stack.push_constant(
+                        Object::ArrayObject(object_system::ArrayObject { elements: array_elements })
+                    ) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    }
+                },
                 OpCode::OpSetGlobal => {
                     let global_index = self.assembly.instructions[instruction_pointer..instruction_pointer+4].parse::<usize>().unwrap();
                     instruction_pointer += 4;
@@ -220,6 +245,7 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     }
                 },
+                _ => return Err(format!("Opcode {:?} not implemented", opcode)),
             }
         }
 
@@ -507,10 +533,35 @@ mod tests {
             Object::StringObject(string) => {
                 test_string_object(string.value, actual)
             },
+            Object::ArrayObject(array) => {
+                test_array_object(array.elements, actual)
+            },
             _ => {
                 return Err(format!("Wrong object type. Expected: Integer Actual: {:?}", actual));
             }
         }
+    }
+
+    fn test_array_object(expected: Vec<Object>, actual: Object) -> Result<(), String> {
+        match actual {
+            Object::ArrayObject(array) => {
+                if array.elements.len() != expected.len() {
+                    return Err(format!("Wrong array length. Expected: {} Actual: {}", expected.len(), array.elements.len()));
+                }
+
+                for (index, element) in array.elements.iter().enumerate() {
+                    test_expected_object(
+                        expected.get(index).unwrap().clone(),
+                        element.clone()
+                    ).unwrap();
+                }
+            },
+            _ => {
+                return Err(format!("Wrong object type. Expected: Array Actual: {:?}", actual));
+            }
+        }
+
+        return Ok(());
     }
 
     fn test_string_object(expected: String, actual: Object) -> Result<(), String> {
@@ -976,6 +1027,39 @@ mod tests {
                     Object::StringObject(StringObject { value: String::from("monkeybanana") }),
                 ],
             }
+        ];
+        run_vm_tests(inputs);
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let inputs = vec![
+            VirtualMachineTest {
+                input: String::from("[]"),
+                expected_stack: vec![
+                    Object::ArrayObject(object_system::ArrayObject { elements: vec![] }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("[1, 2, 3]"),
+                expected_stack: vec![
+                    Object::ArrayObject(object_system::ArrayObject { elements: vec![
+                        Object::Integer(Integer { value: 1 }),
+                        Object::Integer(Integer { value: 2 }),
+                        Object::Integer(Integer { value: 3 }),
+                    ] }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("[1 + 2, 3 - 4, 5 * 6]"),
+                expected_stack: vec![
+                    Object::ArrayObject(object_system::ArrayObject { elements: vec![
+                        Object::Integer(Integer { value: 3 }),
+                        Object::Integer(Integer { value: -1 }),
+                        Object::Integer(Integer { value: 30 }),
+                    ] }),
+                ],
+            },
         ];
         run_vm_tests(inputs);
     }
