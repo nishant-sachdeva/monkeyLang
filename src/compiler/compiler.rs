@@ -109,6 +109,13 @@ impl Compiler {
 
     fn compile_expression(&mut self, expression: &ast::Expression) -> Result<(), String> {
         match expression {
+            ast::Expression::StringLiteral(string_literal) => {
+                let string_value = string_literal.value.clone();
+                let string_object = Object::StringObject(StringObject { value: string_value });
+
+                let constant_index = self.add_constant(string_object);
+                let _ = self.emit(OpCode::OpConstant, vec![constant_index]);
+            }
             ast::Expression::Identifier(identifier) => {
                 let symbol = match self.symbol_table.resolve(identifier.value.clone()) {
                     Ok(symbol) => symbol,
@@ -661,6 +668,36 @@ mod test {
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ]
             },
+        ];
+        run_compiler_tests(inputs);
+    }
+
+    #[test]
+    fn test_string_expressions() {
+        let inputs = vec![
+            CompilerTest {
+                input: String::from("\"monkey\""),
+                expected_constants: vec![
+                    Object::StringObject(StringObject {value: String::from("monkey")})
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            },
+            CompilerTest {
+                input: String::from("\"mon\" + \"key\""),
+                expected_constants: vec![
+                    Object::StringObject(StringObject {value: String::from("mon")}),
+                    Object::StringObject(StringObject {value: String::from("key")}),
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            }
         ];
         run_compiler_tests(inputs);
     }

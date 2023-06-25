@@ -1,5 +1,5 @@
 use crate::interpreter::evaluate::object_system::{self, ObjectInterface};
-use crate::object_system::Object;
+use crate::object_system::*;
 use crate::compiler::compiler::RawAssembly;
 use crate::virtual_machine::bytecode::{
     OpCode,
@@ -397,8 +397,40 @@ impl VirtualMachine {
                     Ok(_) => (),
                     Err(e) => return Err(e),
                 }
-            }
+            },
+            (object_system::ObjectType::StringObject , object_system::ObjectType::StringObject) => {
+                match self.run_string_binary_operation(opcode, left, right) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
             _ => return Err(String::from("Unsupported types")),
+        }
+
+        return Ok(());
+    }
+
+    pub fn run_string_binary_operation(&mut self, opcode: OpCode, left: object_system::Object, right: object_system::Object) -> Result<(), String> {
+        let left = match left {
+            Object::StringObject(string) => string.value,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        let right = match right {
+            Object::StringObject(string) => string.value,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        let result = match opcode {
+            OpCode::OpAdd => left + &right,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        let result_object = Object::StringObject(object_system::StringObject { value: result });
+
+        match self.stack.push_constant(result_object) {
+            Ok(_) => (),
+            Err(e) => return Err(e),
         }
 
         return Ok(());
@@ -472,10 +504,28 @@ mod tests {
             Object::Null => {
                 test_null_object(actual)
             },
+            Object::StringObject(string) => {
+                test_string_object(string.value, actual)
+            },
             _ => {
                 return Err(format!("Wrong object type. Expected: Integer Actual: {:?}", actual));
             }
         }
+    }
+
+    fn test_string_object(expected: String, actual: Object) -> Result<(), String> {
+        match actual {
+            Object::StringObject(string) => {
+                if string.value != expected {
+                    return Err(format!("Wrong string value. Expected: {} Actual: {}", expected, string.value));
+                }
+            },
+            _ => {
+                return Err(format!("Wrong object type. Expected: String Actual: {:?}", actual));
+            }
+        }
+
+        return Ok(());
     }
 
     fn test_null_object(actual: Object) -> Result<(), String> {
@@ -899,6 +949,31 @@ mod tests {
                 input: String::from("let one = 1; let two = one + one; one + two;"),
                 expected_stack: vec![
                     Object::Integer(Integer { value: 3 }),
+                ],
+            }
+        ];
+        run_vm_tests(inputs);
+    }
+
+    #[test]
+    fn test_string_literals() {
+        let inputs = vec![
+            VirtualMachineTest {
+                input: String::from("\"monkey\""),
+                expected_stack: vec![
+                    Object::StringObject(StringObject { value: String::from("monkey") }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("\"mon\" + \"key\""),
+                expected_stack: vec![
+                    Object::StringObject(StringObject { value: String::from("monkey") }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("\"mon\" + \"key\" + \"banana\""),
+                expected_stack: vec![
+                    Object::StringObject(StringObject { value: String::from("monkeybanana") }),
                 ],
             }
         ];
