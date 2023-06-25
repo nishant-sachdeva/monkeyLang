@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::interpreter::evaluate::object_system::{self, ObjectInterface};
 use crate::object_system::*;
 use crate::compiler::compiler::RawAssembly;
@@ -106,6 +108,65 @@ impl VirtualMachine {
             instruction_pointer += 2;
 
             match opcode {
+                OpCode::OpHash => {
+                    let number_of_elements = usize::from_str_radix(
+                        &self.assembly.instructions[instruction_pointer..instruction_pointer+4],
+                        16
+                    ).unwrap();
+                    instruction_pointer += 4;
+
+                    let mut hash_pairs = HashMap::new();
+                    for _ in 0..(number_of_elements/2) {
+                        let value = match self.stack.stack_pop() {
+                            Ok(object) => object,
+                            Err(e) => return Err(e),
+                        };
+                        let key = match self.stack.stack_pop() {
+                            Ok(object) => {
+                                match object.object_type() {
+                                    object_system::ObjectType::BOOLEAN => {
+                                        match object {
+                                            Object::Boolean(boolean) => {
+                                                HashableObject::Boolean(boolean)
+                                            },
+                                            _ => return Err(String::from("Unsupported types")),
+                                        }
+                                    },
+                                    object_system::ObjectType::INTEGER => {
+                                        match object {
+                                            Object::Integer(integer) => {
+                                                HashableObject::Integer(integer)
+                                            },
+                                            _ => return Err(String::from("Unsupported types")),
+                                        }
+                                    },
+                                    object_system::ObjectType::StringObject => {
+                                        match object {
+                                            Object::StringObject(string) => {
+                                                HashableObject::StringObject(string)
+                                            },
+                                            _ => return Err(String::from("Unsupported types")),
+                                        }
+                                    },
+                                    _ => return Err(String::from("Unsupported types")),
+                                }
+                            }
+                            Err(e) => return Err(e),
+                        };
+
+                        hash_pairs.insert(
+                            HashableObject::from(key),
+                            value
+                        );
+                    }
+
+                    match self.stack.push_constant(
+                        Object::HashObject(object_system::HashObject { pairs: hash_pairs })
+                    ) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    }
+                },
                 OpCode::OpArray => {
                     let number_of_elements = usize::from_str_radix(
                         &self.assembly.instructions[instruction_pointer..instruction_pointer+4],
@@ -500,7 +561,9 @@ impl VirtualMachine {
 #[cfg(test)]
 mod tests {
     use std::vec;
+    use std::collections::HashMap;
 
+    use crate::virtual_machine::bytecode::format_raw_assembly;
     use crate::{parser::Parser, interpreter::lexer::Lexer};
     use crate::object_system::{
         Object,
@@ -536,10 +599,40 @@ mod tests {
             Object::ArrayObject(array) => {
                 test_array_object(array.elements, actual)
             },
+            Object::HashObject(hash) => {
+                test_hash_object(hash.pairs, actual)
+            },
             _ => {
                 return Err(format!("Wrong object type. Expected: Integer Actual: {:?}", actual));
             }
         }
+    }
+
+    fn test_hash_object(expected: HashMap<HashableObject, Object>, actual: Object) -> Result<(), String> {
+        match actual {
+            Object::HashObject(hash) => {
+                if hash.pairs.len() != expected.len() {
+                    return Err(format!("Wrong hash length. Expected: {} Actual: {}", expected.len(), hash.pairs.len()));
+                }
+
+                for (key, value) in expected.iter() {
+                    let pair = match hash.pairs.get(key) {
+                        Some(pair) => pair,
+                        None => return Err(format!("Key not found in hash")),
+                    };
+
+                    test_expected_object(
+                        value.clone(),
+                        pair.clone()
+                    ).unwrap();
+                }
+            },
+            _ => {
+                return Err(format!("Wrong object type. Expected: Hash Actual: {:?}", actual));
+            }
+        }
+
+        return Ok(());
     }
 
     fn test_array_object(expected: Vec<Object>, actual: Object) -> Result<(), String> {
@@ -636,8 +729,12 @@ mod tests {
                 Err(e) => panic!("{e}"),
             }
 
+            let raw_assembly = compiler.raw_assembly().unwrap();
+
+            println!("Raw Assembly : {:?}", format_raw_assembly(raw_assembly.instructions.clone()));
+
             let mut vm = VirtualMachine::new(
-                compiler.raw_assembly().unwrap()
+                raw_assembly
             );
 
             match vm.run() {
@@ -1060,6 +1157,58 @@ mod tests {
                     ] }),
                 ],
             },
+        ];
+        run_vm_tests(inputs);
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let inputs = vec![
+            VirtualMachineTest {
+                input: String::from("{}"),
+                expected_stack: vec![
+                    Object::HashObject(object_system::HashObject { pairs: HashMap::new() }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("{1: 2, 2: 3}"),
+                expected_stack: vec![
+                    Object::HashObject(object_system::HashObject {
+                        pairs: {
+                            let mut pairs = HashMap::new();
+                            pairs.insert(HashableObject::Integer(Integer { value: 1 }), Object::Integer(Integer { value: 2 }));
+                            pairs.insert(HashableObject::Integer(Integer { value: 2 }), Object::Integer(Integer { value: 3 }));
+                            pairs
+                        } 
+                    }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("{1+1:2+3, 4+5:5*6}"),
+                expected_stack: vec![
+                    Object::HashObject(object_system::HashObject {
+                        pairs: {
+                            let mut pairs = HashMap::new();
+                            pairs.insert(HashableObject::Integer(Integer { value: 2 }), Object::Integer(Integer { value: 5 }));
+                            pairs.insert(HashableObject::Integer(Integer { value: 9 }), Object::Integer(Integer { value: 30 }));
+                            pairs
+                        } 
+                    }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("{1+1: 2*2, 3+3: 4*4}"),
+                expected_stack: vec![
+                    Object::HashObject(object_system::HashObject {
+                        pairs: {
+                            let mut pairs = HashMap::new();
+                            pairs.insert(HashableObject::Integer(Integer { value: 2 }), Object::Integer(Integer { value: 4 }));
+                            pairs.insert(HashableObject::Integer(Integer { value: 6 }), Object::Integer(Integer { value: 16 }));
+                            pairs
+                        } 
+                    }),
+                ],
+            }
         ];
         run_vm_tests(inputs);
     }

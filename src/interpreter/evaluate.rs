@@ -2,6 +2,7 @@ pub use crate::interpreter::{
     ast,
     tokens
 };
+use std::collections::HashMap;
 
 use std::ops::Deref;
 use std::hash::{Hash, Hasher};
@@ -104,7 +105,7 @@ pub mod object_system {
 
     #[derive(Debug, Clone, PartialEq)]
     pub struct HashObject {
-        pub pairs: std::collections::HashMap<HashableObject, Object>,
+        pub pairs: HashMap<HashableObject, Object>,
     }
 
     impl Hash for HashObject {

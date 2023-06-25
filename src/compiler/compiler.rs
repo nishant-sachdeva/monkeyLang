@@ -1,5 +1,8 @@
 use crate::{
-    interpreter::{evaluate::object_system::*},
+    interpreter::{
+        evaluate::object_system::*,
+        ast::Interface
+    },
     virtual_machine::{
         bytecode::{
             OpCode,
@@ -109,17 +112,37 @@ impl Compiler {
 
     fn compile_expression(&mut self, expression: &ast::Expression) -> Result<(), String> {
         match expression {
+            ast::Expression::HashLiteral(hash_literal) => {
+                let mut keys: Vec<ast::Expression> = Vec::new();
+                for (key, _) in hash_literal.pairs.iter() {
+                    keys.push(key.clone());
+                }
+
+                keys.sort_by(|a, b| a.log().cmp(&b.log()));
+
+                for key in keys.iter() {
+                    let _ = match self.compile_expression(key) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    };
+
+                    let _ = match self.compile_expression(hash_literal.pairs.get(key).unwrap()) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    };
+                }
+
+                let _ = match self.emit(OpCode::OpHash, vec![hash_literal.pairs.len()*2]) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+            }
             ast::Expression::ArrayLiteral(array) => {
                 for element in array.elements.iter() {
                     let _ = match self.compile_expression(element) {
                         Ok(_) => (),
                         Err(e) => return Err(e),
                     };
-
-                    // if last instruction is OpPop, remove it
-                    if self.last_instruction.opcode == Some(OpCode::OpPop) {
-                        self.remove_last_pop();
-                    }
                 }
 
                 let _ = match self.emit(OpCode::OpArray, vec![array.elements.len()]) {
@@ -767,6 +790,71 @@ mod test {
                     make_bytecode(OpCode::OpConstant, vec![5]).unwrap(),
                     make_bytecode(OpCode::OpMul, vec![]).unwrap(),
                     make_bytecode(OpCode::OpArray, vec![3]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            }
+        ];
+        run_compiler_tests(inputs);
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let inputs = vec![
+            CompilerTest {
+                input: String::from("{}"),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpHash, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            },
+            CompilerTest {
+                input: String::from("{1:2, 3:4, 5:6}"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2}),
+                    Object::Integer(Integer {value: 3}),
+                    Object::Integer(Integer {value: 4}),
+                    Object::Integer(Integer {value: 5}),
+                    Object::Integer(Integer {value: 6}),
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![2]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![3]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![4]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![5]).unwrap(),
+                    make_bytecode(OpCode::OpHash, vec![6]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            },
+            CompilerTest {
+                input: String::from("{1+1:2+3, 4+5:5*6}"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2}),
+                    Object::Integer(Integer {value: 3}),
+                    Object::Integer(Integer {value: 4}),
+                    Object::Integer(Integer {value: 5}),
+                    Object::Integer(Integer {value: 5}),
+                    Object::Integer(Integer {value: 6}),
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![2]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![3]).unwrap(),
+                    make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![4]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![5]).unwrap(),
+                    make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![6]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![7]).unwrap(),
+                    make_bytecode(OpCode::OpMul, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpHash, vec![4]).unwrap(),
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ]
             }
