@@ -108,6 +108,22 @@ impl VirtualMachine {
             instruction_pointer += 2;
 
             match opcode {
+                OpCode::OpIndex => {
+                    let index = match self.stack.stack_pop() {
+                        Ok(object) => object,
+                        Err(e) => return Err(e),
+                    };
+
+                    let left = match self.stack.stack_pop() {
+                        Ok(object) => object,
+                        Err(e) => return Err(e),
+                    };
+
+                    _ = match self.execute_index_operation(left, index) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e),
+                    }
+                },
                 OpCode::OpHash => {
                     let number_of_elements = usize::from_str_radix(
                         &self.assembly.instructions[instruction_pointer..instruction_pointer+4],
@@ -311,6 +327,91 @@ impl VirtualMachine {
         }
 
         return Ok(());
+    }
+
+    pub fn execute_index_operation(&mut self, left: object_system::Object, index: object_system::Object) -> Result<(), String> {
+        match (left.object_type(), index.object_type()) {
+            (object_system::ObjectType::ArrayObject, object_system::ObjectType::INTEGER) => {
+                match self.execute_array_index_operation(left, index) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            (object_system::ObjectType::HashObject, _) => {
+                match self.execute_hash_index_operation(left, index) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            _ => return Err(String::from("Unsupported types")),
+        }
+
+        return Ok(());
+    }
+
+    pub fn execute_hash_index_operation(&mut self, left: object_system::Object, index: object_system::Object) -> Result<(), String> {
+        let left = match left {
+            Object::HashObject(hash) => hash.pairs,
+            _ => return Err(String::from("Unsupported types")),
+        };
+        
+        let index = match index {
+            Object::Boolean(boolean) => HashableObject::Boolean(boolean),
+            Object::Integer(integer) => HashableObject::Integer(integer),
+            Object::StringObject(string) => HashableObject::StringObject(string),
+            _ => return Err(String::from("Unsupported types")),
+        };
+        
+        match left.get(&index) {
+            Some(value) => {
+                match self.stack.push_constant(
+                    value.clone()
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+            None => {
+                match self.stack.push_constant(
+                    Object::Null
+                ) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+            },
+        }
+
+        return Ok(())
+    }
+
+    pub fn execute_array_index_operation(&mut self, left: object_system::Object, index: object_system::Object) -> Result<(), String> {
+        let left = match left {
+            Object::ArrayObject(array) => array.elements,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        let index = match index {
+            Object::Integer(integer) => integer.value,
+            _ => return Err(String::from("Unsupported types")),
+        };
+
+        if index >=0 && index < left.len() as i64 {
+            match self.stack.push_constant(
+                left[index as usize].clone()
+            ) {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
+        } else {
+            match self.stack.push_constant(
+                Object::Null
+            ) {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            }
+        }
+
+        return Ok(())
     }
 
     pub fn run_minus_operator(&mut self) -> Result<(), String> {
@@ -1209,6 +1310,73 @@ mod tests {
                     }),
                 ],
             }
+        ];
+        run_vm_tests(inputs);
+    }
+
+    #[test]
+    fn test_index_expressions() {
+        let inputs = vec![
+            VirtualMachineTest {
+                input: String::from("[1,2,3][1]"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 2 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("[1,2,3][0+2]"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 3 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("[[1,1,1]][0][0]"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 1 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("[][0]"),
+                expected_stack: vec![
+                    Object::Null,
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("[1,2,3][99]"),
+                expected_stack: vec![
+                    Object::Null,
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("[1][-1]"),
+                expected_stack: vec![
+                    Object::Null,
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("{1:1, 2:2}[1]"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 1 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("{1:1, 2:2}[2]"),
+                expected_stack: vec![
+                    Object::Integer(Integer { value: 2 }),
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("{1:1}[0]"),
+                expected_stack: vec![
+                    Object::Null,
+                ],
+            },
+            VirtualMachineTest {
+                input: String::from("{}[0]"),
+                expected_stack: vec![
+                    Object::Null,
+                ],
+            },
         ];
         run_vm_tests(inputs);
     }

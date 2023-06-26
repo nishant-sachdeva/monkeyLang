@@ -28,6 +28,7 @@ pub enum OpCode {
     OpGetGlobal,
     OpArray,
     OpHash,
+    OpIndex,
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +40,13 @@ pub struct OpCodeLayout {
 lazy_static! {
     static ref OPCODE_LAYOUTS: HashMap<OpCode, OpCodeLayout> = {
         HashMap::from([
+            (
+                OpCode::OpIndex,
+                OpCodeLayout {
+                    name: OpCode::OpIndex,
+                    operand_widths: vec![]
+                }
+            ),
             (
                 OpCode::OpHash,
                 OpCodeLayout {
@@ -213,6 +221,7 @@ pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
         18 => Ok(OpCode::OpGetGlobal),
         19 => Ok(OpCode::OpArray),
         20 => Ok(OpCode::OpHash),
+        21 => Ok(OpCode::OpIndex),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }
@@ -385,6 +394,7 @@ pub fn format_instruction(opcode: OpCode, operands: Vec<usize>) -> String {
         OpCode::OpGetGlobal => format!("OpGetGlobal {:?}", operands[0]),
         OpCode::OpArray => format!("OpArray {:?}", operands[0]),
         OpCode::OpHash => format!("OpHash {:?}", operands[0]),
+        OpCode::OpIndex => format!("OpIndex"),
         _ => format!("Opcode {} not implemented", opcode as u8),
     }
 }

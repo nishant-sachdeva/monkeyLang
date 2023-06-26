@@ -112,6 +112,22 @@ impl Compiler {
 
     fn compile_expression(&mut self, expression: &ast::Expression) -> Result<(), String> {
         match expression {
+            ast::Expression::IndexExpression(index_expression) => {
+                let _ = match self.compile_expression(&index_expression.left) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+
+                let _ = match self.compile_expression(&index_expression.index) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+
+                let _ = match self.emit(OpCode::OpIndex, vec![]) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                };
+            }
             ast::Expression::HashLiteral(hash_literal) => {
                 let mut keys: Vec<ast::Expression> = Vec::new();
                 for (key, _) in hash_literal.pairs.iter() {
@@ -855,6 +871,53 @@ mod test {
                     make_bytecode(OpCode::OpConstant, vec![7]).unwrap(),
                     make_bytecode(OpCode::OpMul, vec![]).unwrap(),
                     make_bytecode(OpCode::OpHash, vec![4]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ]
+            }
+        ];
+        run_compiler_tests(inputs);
+    }
+
+    #[test]
+    fn test_index_expressions() {
+        let inputs = vec![
+            CompilerTest {
+                input: String::from("[1,2,3][1+1]"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2}),
+                    Object::Integer(Integer {value: 3}),
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 1}),
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![2]).unwrap(),
+                    make_bytecode(OpCode::OpArray, vec![3]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![3]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![4]).unwrap(),
+                    make_bytecode(OpCode::OpAdd, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpIndex, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpPop, vec![]).unwrap(),
+                ],
+            },
+            CompilerTest {
+                input: String::from("{1:2}[2 - 1]"),
+                expected_constants: vec![
+                    Object::Integer(Integer {value: 1}),
+                    Object::Integer(Integer {value: 2}),
+                    Object::Integer(Integer {value: 2}),
+                    Object::Integer(Integer {value: 1}),
+                ],
+                expected_instructions: vec![
+                    make_bytecode(OpCode::OpConstant, vec![0]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![1]).unwrap(),
+                    make_bytecode(OpCode::OpHash, vec![2]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![2]).unwrap(),
+                    make_bytecode(OpCode::OpConstant, vec![3]).unwrap(),
+                    make_bytecode(OpCode::OpSub, vec![]).unwrap(),
+                    make_bytecode(OpCode::OpIndex, vec![]).unwrap(),
                     make_bytecode(OpCode::OpPop, vec![]).unwrap(),
                 ]
             }
