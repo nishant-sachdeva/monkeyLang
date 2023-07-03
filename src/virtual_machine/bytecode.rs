@@ -29,6 +29,8 @@ pub enum OpCode {
     OpArray,
     OpHash,
     OpIndex,
+    OpCall,
+    OpReturnValue,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +42,20 @@ pub struct OpCodeLayout {
 lazy_static! {
     static ref OPCODE_LAYOUTS: HashMap<OpCode, OpCodeLayout> = {
         HashMap::from([
+            (
+                OpCode::OpReturnValue,
+                OpCodeLayout {
+                    name: OpCode::OpReturnValue,
+                    operand_widths: vec![]
+                }
+            ),
+            (
+                OpCode::OpCall,
+                OpCodeLayout {
+                    name: OpCode::OpCall,
+                    operand_widths: vec![1]
+                }
+            ),
             (
                 OpCode::OpIndex,
                 OpCodeLayout {
@@ -222,6 +238,8 @@ pub fn opcode_lookup(opcode: usize) -> Result<OpCode, String> {
         19 => Ok(OpCode::OpArray),
         20 => Ok(OpCode::OpHash),
         21 => Ok(OpCode::OpIndex),
+        22 => Ok(OpCode::OpCall),
+        23 => Ok(OpCode::OpReturnValue),
         _ => Err(format!("Opcode {} not found", opcode)),
     }
 }
@@ -395,6 +413,8 @@ pub fn format_instruction(opcode: OpCode, operands: Vec<usize>) -> String {
         OpCode::OpArray => format!("OpArray {:?}", operands[0]),
         OpCode::OpHash => format!("OpHash {:?}", operands[0]),
         OpCode::OpIndex => format!("OpIndex"),
+        OpCode::OpCall => format!("OpCall {:?}", operands[0]),
+        OpCode::OpReturnValue => format!("OpReturnValue"),
         _ => format!("Opcode {} not implemented", opcode as u8),
     }
 }

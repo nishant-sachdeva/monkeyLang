@@ -50,18 +50,17 @@ impl SymbolTable {
 }
 
 mod test {
-    use super::*;
 
     #[test]
     fn test_define_symbols() {
-        let expected = HashMap::from(
+        let expected = super::HashMap::from(
             [
-                ("a" , Symbol{name: "a".to_string(), scope: GLOBAL_SCOPE.clone(), index: 0}),
-                ("b" , Symbol{name: "b".to_string(), scope: GLOBAL_SCOPE.clone(), index: 1}),
+                ("a" , super::Symbol{name: "a".to_string(), scope: super::GLOBAL_SCOPE.clone(), index: 0}),
+                ("b" , super::Symbol{name: "b".to_string(), scope: super::GLOBAL_SCOPE.clone(), index: 1}),
             ]
         );
 
-        let mut global = SymbolTable::new();
+        let mut global = super::SymbolTable::new();
 
         let a = global.define("a".to_string()).unwrap();
 
@@ -74,13 +73,13 @@ mod test {
 
     #[test]
     fn test_resolve_symbol() {
-        let mut global = SymbolTable::new();
+        let mut global = super::SymbolTable::new();
         global.define("a".to_string()).unwrap();
         global.define("b".to_string()).unwrap();
 
         let expected = vec![
-            Symbol{name: "a".to_string(), scope: GLOBAL_SCOPE.clone(), index: 0},
-            Symbol{name: "b".to_string(), scope: GLOBAL_SCOPE.clone(), index: 1},
+            super::Symbol{name: "a".to_string(), scope: super::GLOBAL_SCOPE.clone(), index: 0},
+            super::Symbol{name: "b".to_string(), scope: super::GLOBAL_SCOPE.clone(), index: 1},
         ];
 
         for sym in expected {

@@ -322,7 +322,7 @@ impl VirtualMachine {
                         Err(e) => return Err(e),
                     }
                 },
-                _ => return Err(format!("Opcode {:?} not implemented", opcode)),
+                _ => return Err(format!("Opcode not implemented: {:?}", opcode)),
             }
         }
 

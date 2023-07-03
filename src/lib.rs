@@ -187,6 +187,7 @@ pub fn start_interpreter(config: &config::Config) {
         object_system::Object::ArrayObject(a) => println!("{:?}", a),
         object_system::Object::HashObject(h) => println!("{:?}", h),
         object_system::Object::BuiltinFunctionObject(b) => println!("{:?}", b),
+        _ => panic!("Incorrect Output")
     }
 }
 
