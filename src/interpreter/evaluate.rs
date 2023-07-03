@@ -2,11 +2,14 @@ pub use crate::interpreter::{
     ast,
     tokens
 };
+use std::collections::HashMap;
 
 use std::ops::Deref;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::cell::RefCell;
+
+use crate::virtual_machine::bytecode::Instructions;
 
 pub mod object_system {
     use crate::interpreter::ast::Interface;
@@ -24,6 +27,7 @@ pub mod object_system {
         ArrayObject(ArrayObject),
         HashObject(HashObject),
         EvalError(EvalError),
+        CompiledFunction(CompiledFunction),
         Null,
     }
     
@@ -37,6 +41,7 @@ pub mod object_system {
         ArrayObject,
         HashObject,
         EvalError,
+        CompiledFunction,
         NULL,
     }
     
@@ -57,6 +62,7 @@ pub mod object_system {
                 Object::BuiltinFunctionObject(bfo) => bfo.log(),
                 Object::ArrayObject(ao) => ao.log(),
                 Object::HashObject(ho) => ho.log(),
+                Object::CompiledFunction(cf) => cf.log(),
                 Object::Null => "0".to_string(),            
             }
         }
@@ -72,6 +78,7 @@ pub mod object_system {
                 Object::ArrayObject(ao) => ao.object_type(),
                 Object::StringObject(so) => so.object_type(),
                 Object::HashObject(ho) => ho.object_type(),
+                Object::CompiledFunction(cf) => cf.object_type(),
                 Object::Null => ObjectType::NULL,            
             }
         }
@@ -82,6 +89,7 @@ pub mod object_system {
         Integer(Integer),
         Boolean(Boolean),
         StringObject(StringObject),
+        CompiledFunction(CompiledFunction),
     }
 
     impl ObjectInterface for HashableObject {
@@ -90,6 +98,7 @@ pub mod object_system {
                 HashableObject::Integer(i) => i.log(),
                 HashableObject::Boolean(b) => b.log(),
                 HashableObject::StringObject(so) => so.log(),
+                HashableObject::CompiledFunction(cf) => cf.log(),
             }
         }
 
@@ -98,13 +107,14 @@ pub mod object_system {
                 HashableObject::Integer(i) => i.object_type(),
                 HashableObject::Boolean(b) => b.object_type(),
                 HashableObject::StringObject(so) => so.object_type(),
+                HashableObject::CompiledFunction(cf) => cf.object_type(),
             }
         }
     }
 
     #[derive(Debug, Clone, PartialEq)]
     pub struct HashObject {
-        pub pairs: std::collections::HashMap<HashableObject, Object>,
+        pub pairs: HashMap<HashableObject, Object>,
     }
 
     impl Hash for HashObject {
@@ -124,6 +134,29 @@ pub mod object_system {
 
         fn object_type(&self) -> ObjectType {
             ObjectType::HashObject
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Eq, Hash)]
+    pub struct CompiledFunction {
+        pub instructions: Instructions
+    }
+
+    impl ObjectInterface for CompiledFunction {
+        fn log(&self) -> String {
+            format!(
+                "[{}]",
+                self.instructions
+                .iter()
+                .map(|e| format!("{:?}", e))
+                .collect::<Vec<String>>()
+                .join(", ")
+            )
+        }
+
+        fn object_type(&self) -> ObjectType {
+            return ObjectType::CompiledFunction;
         }
     }
 
